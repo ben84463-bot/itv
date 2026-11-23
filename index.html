@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投資理由逐季驗證台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+/* VOICE: 卷宗式、冷靜、證據導向（寧可空白，不可捏造）
+   IDEA: 一本逐季累積的審查卷宗：左側目錄，右側為本次審查頁
+   PICTURE: 交易對手核對表與四欄紀錄本身就是主畫面
+   COLOUR/TYPE: 白底、墨色、混凝土灰面、單一安全黃標示待查；Noto Sans TC
+   LAYOUT: 頂部標的列 → 四個步驟分段，窄螢幕單欄堆疊 */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffffff,#1a1a19);--ink:light-dark(#141414,#ececea);--mute:light-dark(#5d5d58,#a9a9a3);
+--plane:light-dark(#efefec,#262624);--line:light-dark(#d8d8d4,#3a3a37);--accent:light-dark(#1d2bd8,#8f99ff);
+--warn:#ffe600;--warnInk:#141414;--bad:light-dark(#b3261e,#ff8a80);--ok:light-dark(#1e6b3a,#7fd69b)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;overflow-x:clip}
+header{background:var(--plane);border-bottom:1px solid var(--line);padding:18px max(4vw,16px)}
+h1{font-size:clamp(24px,3.4vw,34px);line-height:1.15;margin:0;font-weight:700;text-wrap:balance}
+h2{font-size:20px;margin:0 0 4px;font-weight:700}
+h3{font-size:16px;margin:12px 0 6px}
+.sub{color:var(--mute);font-size:13px}
+.wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:0;max-width:1400px;margin:0 auto}
+aside{border-right:1px solid var(--line);padding:18px 16px;min-height:calc(100vh - 90px)}
+main{padding:18px max(3vw,16px) 60px}
+section.step{border-top:2px solid var(--ink);padding:16px 0 22px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+label{font-size:13px;color:var(--mute);display:flex;flex-direction:column;gap:3px}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px;min-height:44px}
+textarea{min-height:64px;width:100%;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+button{font:inherit;font-size:15px;min-height:44px;padding:8px 14px;border-radius:4px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.sm{min-height:34px;padding:4px 10px;font-size:13px}
+button:disabled{opacity:.5;cursor:wait}
+a{color:var(--accent)}
+.card{background:var(--plane);border-radius:6px;padding:12px 14px;margin:10px 0}
+.kv{display:grid;grid-template-columns:8em minmax(0,1fr);gap:2px 10px;font-size:14px}
+.kv dt{color:var(--mute)}.kv dd{margin:0;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:start;vertical-align:top}
+th{font-weight:500;color:var(--mute);font-size:13px}
+.scroll{overflow-x:auto}
+.flag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:3px;margin:2px 4px 2px 0;white-space:nowrap}
+.f-hit{background:var(--warn);color:var(--warnInk)}
+.f-bad{background:var(--bad);color:#fff}
+.f-info{border:1px solid var(--line)}
+.f-ok{border:1px solid var(--ok);color:var(--ok)}
+.cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.col{background:var(--plane);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.col h3{margin:0;font-size:15px}
+.col .hint{font-size:12px;color:var(--mute)}
+.item{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:14px}
+.item .src{font-size:12px;color:var(--mute);overflow-wrap:anywhere}
+.item .acts{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.toclist{list-style:none;padding:0;margin:8px 0}
+.toclist li button{width:100%;text-align:start;background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;padding:8px 4px;font-size:14px}
+.toclist li button.on{font-weight:700;background:var(--plane)}
+.msg{font-size:14px;padding:8px 10px;border-radius:4px;margin:8px 0;background:var(--plane)}
+.msg.err{border-left:4px solid var(--bad)}
+.msg.warn{border-left:4px solid var(--warn)}
+.links{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.links a{display:block;padding:10px 12px;border:1px solid var(--line);border-radius:4px;text-decoration:none;color:var(--ink)}
+.links a small{display:block;color:var(--mute)}
+details{margin:8px 0}summary{cursor:pointer;min-height:32px}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+.dlg.on{display:flex}
+.dlg>div{background:var(--bg);color:var(--ink);border-radius:8px;padding:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.gwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;margin-top:10px}
+.gbox{position:relative;border:1px solid var(--line);border-radius:6px;background:#fff;height:600px;overflow:hidden}
+.gbox svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.tip{position:absolute;pointer-events:none;background:#141414;color:#fff;font-size:13px;line-height:1.5;padding:8px 10px;border-radius:4px;max-width:300px;display:none;z-index:2}
+.tip b{color:#ffe600}
+.gtool{position:absolute;left:8px;top:8px;display:none;align-items:center;gap:6px;flex-wrap:wrap;background:#fff;border:1px solid #d8d8d4;border-radius:6px;padding:6px 8px;font-size:13px;color:#141414;z-index:3;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.gtool .sm{min-width:40px}
+.stklist{position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--bg);border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.15);max-height:360px;overflow:auto;display:none}
+.stklist .sg{display:block;width:100%;text-align:start;background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 12px;font-size:15px;min-height:44px}
+.stklist .sg:hover,.stklist .sg.on{background:var(--plane)}
+table.fin td,table.fin th{white-space:nowrap}.num{text-align:right;font-variant-numeric:tabular-nums}
+table.fin td:first-child{position:sticky;left:0;background:var(--bg)}
+table.rawt caption{text-align:start;font-weight:500;padding:6px 0;color:var(--mute)}
+.lpzone{border:2px dashed var(--line);border-radius:6px;min-height:90px;padding:14px;margin:8px 0;color:var(--mute);font-size:14px;overflow:hidden;max-height:120px}
+.lpzone:focus,.lpzone.on{border-color:var(--accent);outline:none;color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--mute);margin-top:6px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:4px}
+.watch{max-height:600px;overflow:auto}
+.watch .w{border:1px solid var(--line);border-left-width:5px;border-radius:4px;padding:8px 10px;margin-bottom:8px;font-size:14px;cursor:pointer;background:var(--bg)}
+.watch .w.hi{border-left-color:#c62828}.watch .w.mid{border-left-color:#f2c200}.watch .w.lo{border-left-color:#9a9a94}
+.watch .w ul{margin:4px 0 0;padding-left:18px;font-size:13px}
+.chk{flex-direction:row;align-items:center;gap:6px;min-height:44px}
+.chk input{min-height:0;width:18px;height:18px}
+@media(max-width:980px){.gwrap{grid-template-columns:minmax(0,1fr)}.gbox{height:480px}.watch{max-height:none}}
+body.printgraph main>section:not(#s3g),body.printgraph aside,body.printgraph header .noprint,body.printgraph #s3g .noprint{display:none}
+@media(max-width:980px){.cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.wrap{grid-template-columns:minmax(0,1fr)}aside{border-right:0;border-bottom:1px solid var(--line);min-height:0}}
+@media(max-width:600px){.cols{grid-template-columns:minmax(0,1fr)}table{font-size:13px}
+.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-bottom:1px solid var(--line)}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:7em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:6.5em;margin-inline-start:-7em;color:var(--mute)}.stack td:empty{display:none}}
+@media print{aside,header button,.noprint{display:none}.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div>
+      <h1>投資理由逐季驗證台</h1>
+      <div class="sub">公開資訊觀測站「公司對市場說了什麼」× 商工登記「跟它交易的法人是誰」 · <span id="ver"></span></div>
+    </div>
+    <div class="row noprint">
+      <button class="ghost sm" id="btnSettings">設定</button>
+      <button class="ghost sm" id="btnHelp">使用說明</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<aside>
+  <h2>卷宗目錄</h2>
+  <div class="sub">紀錄只存在這台電腦的瀏覽器</div>
+  <ul class="toclist" id="toc"></ul>
+  <div class="row">
+    <button class="ghost sm" id="btnNew">＋新標的</button>
+    <button class="ghost sm" id="btnExport">匯出 JSON</button>
+    <input type="file" id="fileImport" accept=".json,application/json" hidden aria-label="匯入 JSON 檔">
+    <button class="ghost sm" type="button" id="btnImport">匯入 JSON</button>
+  </div>
+  <p class="sub" id="storeNote"></p>
+</aside>
+
+<main>
+  <!-- STEP 1 -->
+  <section class="step" id="s1">
+    <h2>1　標的公司</h2>
+    <div class="sub">輸入股票代號、名稱或產業關鍵字，從清單點選後，會自動帶入統一編號、商工登記與歷年財報。</div>
+    <div class="stkwrap" style="position:relative;max-width:560px;margin-top:8px">
+      <label>搜尋股票<input id="stkQ" autocomplete="off" placeholder="例：華通、2313、印刷電路板" style="width:100%"></label>
+      <div class="stklist" id="stkList"></div>
+    </div>
+    <div class="sub" id="stkNote"></div>
+    <div class="sub" id="autoStatus" style="color:var(--accent);min-height:1.4em"></div>
+    <details style="margin-top:4px"><summary>手動輸入或修正（股票代號、統編）</summary>
+    <div class="row" style="margin-top:8px">
+      <label>股票代號<input id="tTicker" inputmode="numeric" maxlength="6" style="width:7em"></label>
+      <label>公司名稱<input id="tName" style="width:15em"></label>
+      <button class="ghost" id="btnFindBan">以名稱查統編</button>
+      <label>統一編號<input id="tBan" inputmode="numeric" maxlength="8" style="width:8em"></label>
+      <button id="btnLoadTarget">載入商工資料</button>
+    </div></details>
+    <div id="targetBox"></div>
+  </section>
+
+  <!-- STEP 1F -->
+  <section class="step" id="s1f">
+    <h2>歷年財報（自動）</h2>
+    <div class="row noprint"><label>顯示季數<select id="finNq"><option>8</option><option selected>12</option><option>16</option><option>20</option></select></label><button class="ghost sm" id="finReload">重新抓取</button></div>
+    <div id="finBox"></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step" id="s2">
+    <h2>2　公司對市場說了什麼（公開資訊觀測站）</h2>
+    <h3>財報附註：關係人交易（自動擷取）</h3>
+    <div id="rptBox"></div>
+    <h3>其他觀測站資料</h3>
+    <div class="sub">年報、重大訊息、法說會資料目前仍需在新分頁開啟官方頁面閱讀，重點寫進下方表單並標明出處。</div>
+    <div class="links" id="mopsLinks" style="margin-top:8px"></div>
+    <details>
+      <summary>閱讀清單：要從各來源抄出什麼</summary>
+      <table class="stack"><thead><tr><th>來源</th><th>要看的項目</th><th>帶回來的東西</th></tr></thead><tbody>
+      <tr><td>財報附註</td><td>關係人交易、主要客戶／供應商、背書保證、資金貸與、重大承諾</td><td>具名交易對手（名稱、金額、性質）→ 步驟 3</td></tr>
+      <tr><td>年報</td><td>前十大股東、董事法人代表、轉投資、營運計畫</td><td>法人股東與轉投資公司名稱 → 步驟 3</td></tr>
+      <tr><td>重大訊息</td><td>取得處分資產、董事變動、與主要客戶或供應商停止業務、重大合約</td><td>交易對手、日期、金額 → 已確認事實</td></tr>
+      <tr><td>法說會資料</td><td>營收展望、產品組合、資本支出</td><td>公司自己的說法 → 合理解釋；可量化者 → 下一季驗證指標</td></tr>
+      </tbody></table>
+    </details>
+    <div class="card">
+      <h3 style="margin-top:0">記下一筆觀測站內容</h3>
+      <div class="row">
+        <label>來源<select id="mSrc"><option>財報附註</option><option>年報</option><option>重大訊息</option><option>法說會資料</option><option>月營收</option><option>其他</option></select></label>
+        <label>出處（期別／頁碼／公告日）<input id="mRef" style="width:16em" placeholder="115Q3 財報附註七，p.48"></label>
+        <label>放入欄位<select id="mCol"><option value="fact">已確認事實</option><option value="expl">合理解釋</option><option value="gap">尚缺證據</option><option value="next">下一季驗證指標</option></select></label>
+      </div>
+      <label style="margin-top:6px">內容（照原文摘要，不加推論）<textarea id="mText"></textarea></label>
+      <div class="row" style="margin-top:6px"><button id="btnAddMops">加入紀錄</button></div>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step" id="s3">
+    <h2>3　跟它交易的法人是誰（商工登記核對）</h2>
+    <div class="sub">把附註或年報裡的具名交易對手逐一加入，再按「核對」。系統只比對臺灣登記資料；外國法人與自然人查不到屬正常，會列入「尚缺證據」。</div>
+    <div class="card">
+      <div class="row">
+        <label>交易對手名稱或統編<input id="cpName" style="width:16em"></label>
+        <label>附註身分<select id="cpRole"><option>關係人</option><option>主要客戶</option><option>主要供應商</option><option>背書保證對象</option><option>資金貸與對象</option><option>轉投資公司</option><option>法人股東</option><option>其他</option></select></label>
+        <label>揭露內容（金額／性質）<input id="cpDisc" style="width:14em" placeholder="進貨 3.2 億元"></label>
+        <label>出處<input id="cpRef" style="width:10em" placeholder="115Q3 附註七"></label>
+        <button id="btnAddCp">加入</button>
+      </div>
+    </div>
+    <div class="row noprint"><button class="ghost sm" id="btnCheckAll">全部核對</button><button class="ghost sm" id="btnExpandAll">重新擴展集團</button><span class="sub" id="cpStatus"></span></div>
+    <div class="scroll"><table class="stack" id="cpTable"><thead><tr><th>交易對手</th><th>附註身分／揭露</th><th>商工登記</th><th>與標的的登記重疊</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <!-- STEP 3G -->
+  <section class="step" id="s3g">
+    <h2>關係圖：該留意的地方</h2>
+    <div class="sub">依步驟 1、3 的核對結果自動畫出。紅色是有登記事實重疊，黃色是同名或新設立等待確認事項，灰色虛線是商工查無。可拖曳節點、滾輪縮放；點節點會只亮出它的關係。</div>
+    <div class="row noprint" style="margin-top:6px">
+      <label class="chk"><input type="checkbox" id="gFocus">只顯示留意路徑</label>
+      <label class="chk"><input type="checkbox" id="gAll">顯示全部董監事</label>
+      <label class="chk">節點大小<input type="range" id="gScale" min="0.5" max="2.5" step="0.05" value="1" style="width:110px"></label>
+      <label class="chk">文字大小<input type="range" id="gFont" min="0.7" max="2" step="0.05" value="1" style="width:110px"></label>
+      <button class="ghost sm" id="gRelayout">重新排列</button>
+      <button class="ghost sm" id="gResetSize">大小與框框全部重設</button>
+      <button class="ghost sm" id="gPng">下載 PNG</button>
+      <button class="ghost sm" id="gSvg">下載 SVG</button>
+      <button class="ghost sm" id="gPrint">列印／存 PDF</button>
+    </div>
+    <div class="gwrap">
+      <div>
+        <div class="gbox" id="gbox"><svg id="gsvg"></svg><div class="tip" id="gtip"></div>
+          <div class="gtool" id="gTool"><span>已選：<b id="gToolName"></b> <span id="gToolPct"></span></span><button class="sm" id="gToolMinus" aria-label="縮小節點">－</button><button class="sm" id="gToolPlus" aria-label="放大節點">＋</button><button class="ghost sm" id="gToolReset">原尺寸</button></div></div>
+        <div class="sub" style="margin-top:4px">調整方式：點選節點後用 ＋／－，或按住 Shift 在節點上滾動滑鼠滾輪；拖曳黃框四角可拉大縮小，拖曳框內空白處可整群移動，雙擊黃框可恢復自動大小。</div>
+        <div class="legend">
+          <span><i style="background:#141414"></i>標的公司</span><span><i style="background:#c62828"></i>高度留意</span><span><i style="background:#f2c200"></i>待確認</span>
+          <span><i style="background:#9a9a94"></i>未見重疊</span><span><i style="background:#fff;border:2px dashed #9a9a94"></i>商工查無</span>
+          <span>◆ 法人股東／法人董監事</span><span><i style="background:#f2c200;width:9px;height:9px;border:1px dashed #9a7b00"></i>自然人（黃＝同名出現在多家）</span><span><i style="background:#d9c3a0"></i>擴展出的集團企業</span><span style="color:#1d2bd8">┅ 財報揭露的自然人關係人</span><span>━ 交易　━(褐) 法人董監事　┅ 同地址　淡色框：疑似同集團（登記事實）</span>
+        </div>
+      </div>
+      <div><h3 style="margin-top:0">留意清單</h3><div class="watch" id="watch"></div></div>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="step" id="s4">
+    <h2>4　四欄紀錄</h2>
+    <div class="row">
+      <label>本次審查<select id="pSel"></select></label>
+      <button class="ghost" id="btnNewPeriod">＋新增一期</button>
+      <button class="ghost" id="btnMd">複製為文字</button>
+      <button class="ghost" id="btnMdFile">下載 Markdown</button>
+    </div>
+    <div id="prevChecks"></div>
+    <div class="cols" id="cols" style="margin-top:10px"></div>
+  </section>
+</main>
+</div>
+
+<div class="dlg" id="dlg"><div id="dlgBody"></div></div>
+
+<script>
+{
+const VERSION='v0.6.0', BUILT='2026-11-21';
+document.getElementById('ver').textContent=VERSION+'（建置 '+BUILT+'；商工資料取自台灣公司資料 API，非經濟部官網即時狀態）';
+const COLS=[
+ {k:'fact',t:'已確認事實',h:'有出處可查、可重現的內容'},
+ {k:'expl',t:'合理解釋',h:'對事實的解讀，須註明依據'},
+ {k:'gap',t:'尚缺證據',h:'還不能下結論的地方'},
+ {k:'next',t:'下一季驗證指標',h:'下一期要回頭檢查的具體數字或事件'}];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const now=()=>new Date().toLocaleString('zh-TW',{hour12:false});
+const uid=()=>Math.random().toString(36).slice(2,10);
+
+/* ---------- storage ---------- */
+const KEY='itv.v1';
+let DB={settings:{companyApi:'https://company.g0v.ronny.tw/api',pccApi:'https://pcc-api.openfun.app/api',token:''},cases:{},current:null};
+let storeOK=true;
+try{const s=localStorage.getItem(KEY);if(s){const d=JSON.parse(s);DB={...DB,...d,settings:{...DB.settings,...(d.settings||{})}}}}catch(e){storeOK=false}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));$('storeNote').textContent='已自動儲存 '+now()}catch(e){storeOK=false;$('storeNote').textContent='此瀏覽器無法儲存，請記得匯出 JSON'}}
+if(!storeOK)$('storeNote').textContent='此瀏覽器無法儲存，請記得匯出 JSON';
+const cur=()=>DB.cases[DB.current];
+
+/* ---------- network: fetch, fallback JSONP ---------- */
+function jsonp(url){return new Promise((res,rej)=>{const cb='cb_'+uid();const s=document.createElement('script');
+ const t=setTimeout(()=>{cleanup();rej(new Error('逾時'))},20000);
+ function cleanup(){clearTimeout(t);delete window[cb];s.remove()}
+ window[cb]=d=>{cleanup();res(d)};s.onerror=()=>{cleanup();rej(new Error('連線失敗'))};
+ s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;document.head.appendChild(s)})}
+async function companyGet(path){const url=DB.settings.companyApi.replace(/\/$/,'')+path;
+ try{const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}
+ catch(e){return await jsonp(url)}}
+async function pccGet(path){const url=DB.settings.pccApi.replace(/\/$/,'')+path;const h={};
+ if(DB.settings.token)h.Authorization='Bearer '+DB.settings.token;
+ const r=await fetch(url,{headers:h});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}
+
+/* ---------- normalisers & comparison ---------- */
+const fw=s=>String(s||'').replace(/[！-～]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/　/g,' ');
+const normAddr=s=>fw(s).replace(/\s/g,'').replace(/臺/g,'台').replace(/之/g,'-');
+const bldg=s=>{const a=normAddr(s);const i=a.indexOf('號');return i>0?a.slice(0,i+1):a};
+const normName=s=>fw(s).replace(/\s/g,'');
+const ymd=d=>d&&d.year?`${d.year}/${d.month}/${d.day}`:'';
+function legalOf(d){ // 所代表法人 → {id,name}
+ const a=d['所代表法人'];if(!a)return null;if(Array.isArray(a)){const id=String(a[0]??'').replace(/\D/g,'');return{id:id||null,name:a[1]||''}}
+ if(typeof a==='string')return{id:null,name:a};return null}
+function summary(c){if(!c)return null;const dirs=(c['董監事名單']||[]).map(d=>({title:d['職稱']||'',name:normName(d['姓名']),legal:legalOf(d)}));
+ return{name:c['公司名稱']||c['財政部']?.['營業人名稱']||'',status:c['公司狀況']||'',rep:normName(c['代表人姓名']||''),
+ addr:c['公司所在地']||c['財政部']?.['營業地址']||'',cap:c['資本總額(元)']||c['財政部']?.['資本額']||'',
+ est:ymd(c['核准設立日期'])||ymd(c['財政部']?.['設立日期']),chg:ymd(c['最後核准變更日期']),reg:c['登記機關']||'',
+ dirs,managers:(c['經理人名單']||[]).map(m=>normName(m['姓名'])),fiaOnly:!c['公司名稱']&&!!c['財政部']}}
+function compare(t,tBan,c,cBan){ // returns flags; each flag: {lv:'hit'|'bad'|'info', col:'fact'|'gap', text}
+ const F=[];if(!t||!c)return F;
+ const tNames=new Set([t.rep,...t.dirs.map(d=>d.name),...t.managers].filter(Boolean));
+ const cPeople=[c.rep,...c.dirs.map(d=>d.name),...c.managers].filter(Boolean);
+ const shared=[...new Set(cPeople.filter(n=>tNames.has(n)))];
+ if(t.rep&&c.rep&&t.rep===c.rep)F.push({lv:'hit',col:'gap',text:`代表人同名：${c.rep}（同名不等於同一人，需以身分證號或其他資料確認）`});
+ const others=shared.filter(n=>!(t.rep&&t.rep===c.rep&&n===c.rep));
+ if(others.length)F.push({lv:'hit',col:'gap',text:`董監事／經理人同名：${others.join('、')}（未確認為同一人）`});
+ // corporate links: exact by 統編 → fact
+ const cLegal=c.dirs.filter(d=>d.legal);const tLegal=t.dirs.filter(d=>d.legal);
+ cLegal.forEach(d=>{if(d.legal.id&&tBan&&d.legal.id===tBan)F.push({lv:'hit',col:'fact',text:`標的公司（${tBan}）為交易對手之法人董監事：${d.title} ${d.name}`})});
+ tLegal.forEach(d=>{if(d.legal.id&&cBan&&d.legal.id===cBan)F.push({lv:'hit',col:'fact',text:`交易對手（${cBan}）為標的公司之法人董監事：${d.title} ${d.name}`})});
+ const tIds=new Set(tLegal.map(d=>d.legal.id).filter(Boolean));
+ const sameLegal=[...new Set(cLegal.filter(d=>d.legal.id&&tIds.has(d.legal.id)).map(d=>`${d.legal.name}（${d.legal.id}）`))];
+ if(sameLegal.length)F.push({lv:'hit',col:'fact',text:`雙方董監事由同一法人代表：${sameLegal.join('、')}`});
+ if(t.addr&&c.addr){if(normAddr(t.addr)===normAddr(c.addr))F.push({lv:'hit',col:'fact',text:`登記地址相同：${c.addr}`});
+  else if(bldg(t.addr)===bldg(c.addr))F.push({lv:'hit',col:'fact',text:`登記地址同門牌（樓層不同）：${c.addr}`})}
+ if(c.status&&!/核准設立|營業中/.test(c.status))F.push({lv:'bad',col:'fact',text:`交易對手登記狀況：${c.status}`});
+ if(c.est){const y=+c.est.split('/')[0];if(y&&new Date().getFullYear()-y<=2)F.push({lv:'info',col:'gap',text:`交易對手設立未滿約兩年（${c.est}），需比對交易起始時間`})}
+ if(c.fiaOnly)F.push({lv:'info',col:'gap',text:'僅查到財政部稅籍資料（可能為商號、分公司或非公司組織），無董監事資料'});
+ return F}
+
+/* ---------- case management ---------- */
+function newCase(keep){const id=uid();DB.cases[id]={id,ticker:'',name:'',ban:'',target:null,targetAt:'',cps:[],periods:[],pid:null,created:now()};DB.current=id;addPeriod('買進前審查');save();renderAll()}
+function addPeriod(label){const c=cur();const prev=c.periods[c.periods.length-1];
+ const p={id:uid(),label,created:now(),cols:{fact:[],expl:[],gap:[],next:[]},checks:{}};
+ if(prev)prev.cols.next.forEach(it=>p.checks[it.id]={status:'待查',note:''});
+ c.periods.push(p);c.pid=p.id}
+const period=()=>{const c=cur();return c&&c.periods.find(p=>p.id===c.pid)};
+function addItem(col,text,src){const p=period();if(!p||!text.trim())return;p.cols[col].push({id:uid(),text:text.trim(),src:src||'',at:now()});save();renderCols()}
+
+/* ---------- rendering ---------- */
+function renderToc(){const ids=Object.keys(DB.cases);
+ $('toc').innerHTML=ids.length?ids.map(id=>{const c=DB.cases[id];return`<li><button data-id="${id}" class="${id===DB.current?'on':''}">${esc(c.ticker||'—')}　${esc(c.name||'未命名標的')}<br><span class="sub">${c.periods.length} 期紀錄・${c.cps.length} 個交易對手</span></button></li>`}).join(''):'<li class="sub">尚無紀錄</li>';
+ $('toc').querySelectorAll('button').forEach(b=>b.onclick=()=>{DB.current=b.dataset.id;save();renderAll()})}
+function renderTarget(){const c=cur();$('tTicker').value=c.ticker;$('tName').value=c.name;$('tBan').value=c.ban;
+ const head=c.ticker?`<div class="card" style="background:var(--ink);color:var(--bg)"><b style="font-size:22px">${esc(c.ticker)}　${esc(c.name)}</b>　${esc(c.industry||'')} ${esc(c.market||'')}<br><span style="font-size:13px">統一編號 ${esc(c.ban||'未取得')}${c.fullName?'・'+esc(c.fullName):''}${c.banSrc?'（'+esc(c.banSrc)+'）':''}</span></div>`:'';
+ const t=c.target;if(!t){$('targetBox').innerHTML=head+'<p class="sub">尚未載入商工資料。</p>';return}
+ $('targetBox').innerHTML=head+`<div class="card"><dl class="kv">
+ <dt>公司名稱</dt><dd>${esc(t.name)}</dd><dt>登記狀況</dt><dd>${esc(t.status)}</dd><dt>代表人</dt><dd>${esc(t.rep)}</dd>
+ <dt>所在地</dt><dd>${esc(t.addr)}</dd><dt>資本總額</dt><dd>${esc(t.cap)}</dd><dt>核准設立</dt><dd>${esc(t.est)}</dd>
+ <dt>最後變更</dt><dd>${esc(t.chg)}</dd><dt>查詢時間</dt><dd>${esc(c.targetAt)}</dd></dl>
+ <details><summary>董監事名單（${t.dirs.length} 人）</summary><table class="stack"><thead><tr><th>職稱</th><th>姓名</th><th>所代表法人</th></tr></thead><tbody>
+ ${t.dirs.map(d=>`<tr><td data-l="職稱">${esc(d.title)}</td><td data-l="姓名">${esc(d.name)}</td><td data-l="所代表法人">${d.legal?esc(d.legal.name)+(d.legal.id?'（'+esc(d.legal.id)+'）':''):''}</td></tr>`).join('')}
+ </tbody></table></details></div>`}
+function renderMops(){const k=encodeURIComponent(cur().ticker||'');const has=!!cur().ticker;
+ const L=[
+ [`https://mopsov.twse.com.tw/mops/web/ezsearch?co_id=${k}`,'公告彙總（舊版觀測站）','依代號列出重訊、財報、董事變動等公告'],
+ ['https://mops.twse.com.tw/','公開資訊觀測站首頁','新版介面，輸入代號查財報、重訊'],
+ ['https://doc.twse.com.tw/','電子書（財報、年報 PDF）','查附註全文與年報'],
+ [`https://pcc-api.openfun.app/api/searchbycompanyid?query=${encodeURIComponent(cur().ban||'')}`,'標的公司政府標案（API 原始資料）','需先填統編']];
+ $('mopsLinks').innerHTML=(has?'':'<p class="sub">填入股票代號後，連結會帶入代號。</p>')+L.map(l=>`<a href="${esc(l[0])}" target="_blank" rel="noopener">${esc(l[1])}<small>${esc(l[2])}</small></a>`).join('')}
+function renderCps(){const c=cur();const tb=$('cpTable').querySelector('tbody');
+ if(!c.cps.length){tb.innerHTML='<tr><td colspan="5" class="sub">尚未加入交易對手。</td></tr>';scheduleGraph();return}
+ tb.innerHTML=c.cps.map((p,i)=>{const r=p.reg;
+  const regHtml=p.err?`<span class="flag f-bad">${esc(p.err)}</span>`:r?`<b>${esc(r.name)}</b>（${esc(p.ban)}）<br>${esc(r.status)}・代表人 ${esc(r.rep)}<br><span class="sub">${esc(r.addr)}</span><br><span class="sub">董監事 ${r.dirs.length} 人・設立 ${esc(r.est)}・查詢 ${esc(p.at)}</span>${p.pcc!=null?`<br><span class="sub">政府採購公告 ${esc(p.pcc)} 筆</span>`:''}${p.expanded?`<br><span class="sub">集團擴展：${Object.values(c.grp||{}).filter(g=>g.via.some(v=>v.from===p.ban)).length} 家${p.addrCrowded?`；同址公司 ${p.addrCrowded} 家過多（商務中心？）略過`:''}${p.fundCrowded?'；'+esc(p.fundCrowded.join('、'))+' 投資過多略過':''}${p.nameCrowded?'；'+esc(p.nameCrowded.join('、')):''}</span>`:''}`:'<span class="sub">未核對</span>';
+  const fl=(p.flags||[]).map((f,j)=>`<div><span class="flag ${f.lv==='bad'?'f-bad':f.lv==='hit'?'f-hit':'f-info'}">${f.col==='fact'?'登記事實':'待確認'}</span>${esc(f.text)} <button class="ghost sm" data-add="${i}:${j}">→${f.col==='fact'?'已確認事實':'尚缺證據'}</button></div>`).join('')||(r?'<span class="flag f-ok">未發現登記重疊</span>':'');
+  return`<tr><td data-l="交易對手">${esc(p.q)}</td><td data-l="附註身分">${esc(p.role)}<br><span class="sub">${esc(p.disc)} ${p.ref?'｜'+esc(p.ref):''}</span></td><td data-l="商工登記">${regHtml}</td><td data-l="登記重疊">${fl}</td>
+  <td data-l="操作"><button class="ghost sm" data-chk="${i}">核對</button> ${r?`<button class="ghost sm" data-exp="${i}">擴展集團</button>`:''} <button class="ghost sm" data-del="${i}">刪除</button></td></tr>`}).join('');
+ scheduleGraph();
+ tb.querySelectorAll('[data-chk]').forEach(b=>b.onclick=()=>checkCp(+b.dataset.chk));
+ tb.querySelectorAll('[data-exp]').forEach(b=>b.onclick=async()=>{b.disabled=true;const n=await expandCp(+b.dataset.exp);$('cpStatus').textContent=`新增集團企業 ${n} 家`;renderCps()});
+ tb.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{c.cps.splice(+b.dataset.del,1);save();renderCps();renderToc()});
+ tb.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const[i,j]=b.dataset.add.split(':').map(Number);const p=c.cps[i],f=p.flags[j];
+  addItem(f.col,`${p.reg?.name||p.q}（${p.role}）：${f.text}`,`商工登記（台灣公司資料 API，統編 ${p.ban}），查詢 ${p.at}；附註出處 ${p.ref||'未填'}`);b.disabled=true;b.textContent='已加入'})}
+function renderPeriods(){const c=cur();$('pSel').innerHTML=c.periods.map(p=>`<option value="${p.id}" ${p.id===c.pid?'selected':''}>${esc(p.label)}（${esc(p.created.split(' ')[0])}）</option>`).join('')}
+function renderChecks(){const c=cur();const p=period();const idx=c.periods.indexOf(p);const prev=c.periods[idx-1];
+ if(!prev||!prev.cols.next.length){$('prevChecks').innerHTML='';return}
+ $('prevChecks').innerHTML=`<div class="card"><h3 style="margin-top:0">驗證上一期（${esc(prev.label)}）設定的指標</h3>
+ <table class="stack"><thead><tr><th>指標</th><th>結果</th><th>說明</th></tr></thead><tbody>${prev.cols.next.map(it=>{const ck=p.checks[it.id]||(p.checks[it.id]={status:'待查',note:''});
+ return`<tr><td data-l="指標">${esc(it.text)}</td><td data-l="結果"><select data-ck="${it.id}">${['待查','符合','不符合','無法驗證'].map(s=>`<option ${s===ck.status?'selected':''}>${s}</option>`).join('')}</select></td><td data-l="說明"><input data-cn="${it.id}" value="${esc(ck.note)}" style="width:100%" placeholder="依據什麼資料判斷"></td></tr>`}).join('')}</tbody></table></div>`;
+ $('prevChecks').querySelectorAll('[data-ck]').forEach(s=>s.onchange=()=>{p.checks[s.dataset.ck].status=s.value;save()});
+ $('prevChecks').querySelectorAll('[data-cn]').forEach(s=>s.onchange=()=>{p.checks[s.dataset.cn].note=s.value;save()})}
+function renderCols(){const p=period();if(!p){$('cols').innerHTML='';return}
+ $('cols').innerHTML=COLS.map(C=>`<div class="col"><h3>${C.t}（${p.cols[C.k].length}）</h3><div class="hint">${C.h}</div>
+ ${p.cols[C.k].map((it,i)=>`<div class="item">${esc(it.text)}${it.src?`<div class="src">出處：${esc(it.src)}</div>`:''}<div class="acts">
+ <button class="ghost sm" data-ed="${C.k}:${i}">修改</button><button class="ghost sm" data-mv="${C.k}:${i}">移欄</button><button class="ghost sm" data-rm="${C.k}:${i}">刪除</button></div></div>`).join('')}
+ <textarea data-new="${C.k}" placeholder="新增一條${C.t}"></textarea><input data-newsrc="${C.k}" placeholder="出處"><button class="ghost sm" data-addc="${C.k}">加入</button></div>`).join('');
+ const q=s=>$('cols').querySelectorAll(s);
+ q('[data-addc]').forEach(b=>b.onclick=()=>{const k=b.dataset.addc;addItem(k,$('cols').querySelector(`[data-new="${k}"]`).value,$('cols').querySelector(`[data-newsrc="${k}"]`).value)});
+ q('[data-rm]').forEach(b=>b.onclick=()=>{const[k,i]=b.dataset.rm.split(':');p.cols[k].splice(+i,1);save();renderCols()});
+ q('[data-ed]').forEach(b=>b.onclick=()=>{const[k,i]=b.dataset.ed.split(':');const it=p.cols[k][+i];
+  dialog(`<h2>修改</h2><label>內容<textarea id="eT">${esc(it.text)}</textarea></label><label>出處<input id="eS" value="${esc(it.src)}"></label><div class="row" style="margin-top:10px"><button id="eOK">儲存</button><button class="ghost" id="eNo">取消</button></div>`);
+  $('eOK').onclick=()=>{it.text=$('eT').value;it.src=$('eS').value;save();closeDlg();renderCols()};$('eNo').onclick=closeDlg});
+ q('[data-mv]').forEach(b=>b.onclick=()=>{const[k,i]=b.dataset.mv.split(':');
+  dialog(`<h2>移到哪一欄</h2><div class="row">${COLS.filter(C=>C.k!==k).map(C=>`<button class="ghost" data-to="${C.k}">${C.t}</button>`).join('')}<button class="ghost" id="eNo">取消</button></div>`);
+  $('dlgBody').querySelectorAll('[data-to]').forEach(x=>x.onclick=()=>{p.cols[x.dataset.to].push(p.cols[k].splice(+i,1)[0]);save();closeDlg();renderCols()});$('eNo').onclick=closeDlg})}
+function renderAll(){if(!DB.current||!DB.cases[DB.current]){const ids=Object.keys(DB.cases);if(ids.length)DB.current=ids[0];else{newCase();return}}
+ renderToc();renderTarget();renderFin();renderRpt();if(cur().ticker&&!RPT[cur().ticker])loadRpt();renderMops();renderCps();renderPeriods();renderChecks();renderCols()}
+
+/* ---------- dialogs ---------- */
+function dialog(html){$('dlgBody').innerHTML=html;$('dlg').classList.add('on')}
+function closeDlg(){$('dlg').classList.remove('on')}
+$('dlg').onclick=e=>{if(e.target.id==='dlg')closeDlg()};
+function msg(html,kind=''){dialog(`<div class="msg ${kind}">${html}</div><button id="eNo">關閉</button>`);$('eNo').onclick=closeDlg}
+
+/* ---------- actions ---------- */
+async function resolveBan(q){q=q.trim();if(/^\d{8}$/.test(q))return q;
+ const r=await companyGet('/bulksearch?names='+encodeURIComponent(q));const hit=Array.isArray(r)?r[0]:null;
+ return hit&&hit.result?String(hit.result):null}
+$('btnFindBan').onclick=async e=>{const b=e.target;const n=$('tName').value.trim();if(!n)return msg('請先輸入公司全名。','warn');
+ b.disabled=true;try{const rr=await banByName(n);const id=rr&&rr.ban;if(id){$('tBan').value=id;cur().ban=id;cur().name=n;save();renderToc();renderMops()}else msg('查無完全相符的公司名稱。請確認是否為登記全名（含「股份有限公司」）。','warn')}
+ catch(err){msg('查詢失敗：'+esc(err.message)+'。可能是網路或內網防火牆擋住 API，或流量受限，請稍後再試。','err')}finally{b.disabled=false}};
+['tTicker','tName','tBan'].forEach(id=>$(id).onchange=()=>{const c=cur();c.ticker=$('tTicker').value.trim();c.name=$('tName').value.trim();c.ban=$('tBan').value.trim();save();renderToc();renderMops()});
+$('btnAddMops').onclick=()=>{const t=$('mText').value;if(!t.trim())return;addItem($('mCol').value,t,`${$('mSrc').value}${$('mRef').value?'｜'+$('mRef').value:''}`);$('mText').value=''};
+$('btnAddCp').onclick=()=>{const q=$('cpName').value.trim();if(!q)return;cur().cps.push({q,role:$('cpRole').value,disc:$('cpDisc').value.trim(),ref:$('cpRef').value.trim(),reg:null,flags:[]});
+ $('cpName').value='';$('cpDisc').value='';save();renderCps();renderToc()};
+async function checkCp(i){const c=cur();const p=c.cps[i];p.err='';$('cpStatus').textContent='核對中：'+p.q;
+ try{const ban=await resolveBan(p.q);
+  if(!ban){p.err='查無臺灣登記（名稱不符、外國法人或自然人）';p.reg=null;p.flags=[];
+   period()&&!period().cols.gap.some(x=>x.text.includes(p.q))&&addItem('gap',`${p.q}（${p.role}）：商工登記查無，需確認是否為外國法人、名稱縮寫或自然人`,`附註出處 ${p.ref||'未填'}`)}
+  else{p.ban=ban;const r=await companyGet('/show/'+ban);p.reg=summary(r&&r.data);p.at=now();
+   p.flags=c.target?compare(c.target,c.ban,p.reg,ban):[{lv:'info',col:'gap',text:'尚未載入標的公司資料，無法比對重疊'}];
+   try{const pr=await pccGet('/searchbycompanyid?query='+ban);p.pcc=pr.total_records??null}catch(e){p.pcc=null}}}
+ catch(err){p.err='查詢失敗：'+err.message}
+ $('cpStatus').textContent='';save();renderCps()}
+$('btnCheckAll').onclick=async e=>{const b=e.target;b.disabled=true;await checkAll(false);b.disabled=false};
+$('pSel').onchange=()=>{cur().pid=$('pSel').value;save();renderChecks();renderCols()};
+$('btnNewPeriod').onclick=()=>{const y=new Date();const q=Math.floor(y.getMonth()/3)+1;
+ dialog(`<h2>新增一期</h2><label>名稱<input id="pL" value="${y.getFullYear()-1911}Q${q} 持有期間驗證"></label><p class="sub">上一期的「下一季驗證指標」會自動帶入，逐條標記符合與否。</p><div class="row"><button id="eOK">建立</button><button class="ghost" id="eNo">取消</button></div>`);
+ $('eOK').onclick=()=>{addPeriod($('pL').value||'未命名');save();closeDlg();renderAll()};$('eNo').onclick=closeDlg};
+function toMd(){const c=cur();const p=period();const prev=c.periods[c.periods.indexOf(p)-1];let s=`# ${c.ticker} ${c.name}｜${p.label}\n\n統編：${c.ban}　建立：${p.created}　工具：${VERSION}\n\n`;
+ if(prev&&prev.cols.next.length){s+=`## 上一期指標驗證\n`;prev.cols.next.forEach(it=>{const k=p.checks[it.id]||{};s+=`- [${k.status||'待查'}] ${it.text}${k.note?'——'+k.note:''}\n`});s+='\n'}
+ COLS.forEach(C=>{s+=`## ${C.t}\n`;if(!p.cols[C.k].length)s+='（空白）\n';p.cols[C.k].forEach(it=>s+=`- ${it.text}${it.src?`（出處：${it.src}）`:''}\n`);s+='\n'});
+ if(c.cps.length){s+='## 交易對手核對\n';c.cps.forEach(x=>{s+=`- ${x.q}｜${x.role}｜${x.disc}｜${x.reg?`${x.reg.name}（${x.ban}）${x.reg.status}`:x.err||'未核對'}\n`;(x.flags||[]).forEach(f=>s+=`  - ${f.text}\n`)})}
+ return s}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+$('btnMd').onclick=async()=>{try{await navigator.clipboard.writeText(toMd());msg('已複製。')}catch(e){dialog(`<h2>請手動複製</h2><textarea style="min-height:300px">${esc(toMd())}</textarea><button id="eNo">關閉</button>`);$('eNo').onclick=closeDlg}};
+$('btnMdFile').onclick=()=>{const c=cur();download(`${c.ticker||'標的'}_${period().label}.md`,toMd(),'text/markdown')};
+$('btnExport').onclick=()=>download(`投資理由紀錄_${new Date().toISOString().slice(0,10)}.json`,JSON.stringify({app:'itv',version:VERSION,exported:now(),cases:DB.cases},null,1),'application/json');
+$('btnImport').onclick=()=>$('fileImport').click();
+$('fileImport').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.cases)throw new Error('不是本工具的匯出檔');
+ let n=0;Object.values(d.cases).forEach(c=>{let id=c.id||uid();if(DB.cases[id])id=uid();c.id=id;DB.cases[id]=c;n++});save();renderAll();msg(`已匯入 ${n} 個標的（同名不覆蓋，另存一份）。`)}
+ catch(err){msg('匯入失敗：'+esc(err.message),'err')}e.target.value=''};
+$('btnNew').onclick=newCase;
+$('btnSettings').onclick=()=>{const s=DB.settings;dialog(`<h2>設定</h2>
+ <label>關係人交易資料網址（GitHub Pages 上可留空）<input id="sD" value="${esc(s.dataBase||'')}" placeholder="https://帳號.github.io/repo/data/"></label>
+ <label>GitHub repo（帳號/repo，用於送出抓取請求；GitHub Pages 上可留空）<input id="sR" value="${esc(s.repo||'')}"></label>
+ <label class="chk"><input type="checkbox" id="sPN" ${s.expandPerson===false?'':'checked'}>擴展集團時也用「代表人／董事長姓名」搜尋（同名需人工確認）</label>
+ <label>公司資料 API<input id="sC" value="${esc(s.companyApi)}"></label>
+ <label>標案 API<input id="sP" value="${esc(s.pccApi)}"></label>
+ <label>FinMind Token（選填，只存在你這台電腦）<input id="sF" value="${esc(s.fmToken||'')}" type="password" autocomplete="off"></label>
+ <label>openfun Token（選填，只存在你這台電腦）<input id="sT" value="${esc(s.token)}" type="password" autocomplete="off"></label>
+ <p class="sub">不填 Token 也能用，以你自己的連線匿名查詢，不會用到別人的額度；匿名查詢可能遇到流量限制。Token 只送往標案 API。</p>
+ <div class="row"><button id="eOK">儲存</button><button class="ghost" id="eNo">取消</button><button class="ghost" id="eWipe">清除本機全部紀錄</button><button class="ghost" id="eTest">連線檢查</button></div><div id="testOut"></div>`);
+ $('eOK').onclick=()=>{s.companyApi=$('sC').value.trim();s.pccApi=$('sP').value.trim();s.token=$('sT').value.trim();s.fmToken=$('sF').value.trim();s.dataBase=$('sD').value.trim();s.repo=$('sR').value.trim();s.expandPerson=$('sPN').checked;save();closeDlg();if(cur().ticker){delete RPT[cur().ticker];loadRpt()}};$('eNo').onclick=closeDlg;
+ $('eTest').onclick=async()=>{const T=[['FinMind（股票清單、財報）',()=>fmGet({dataset:'TaiwanStockInfo'}).then(d=>d.length+' 筆')],
+  ['證交所 OpenAPI（上市統編）',()=>fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L').then(r=>r.json()).then(d=>d.length+' 筆')],
+  ['櫃買中心 OpenAPI（上櫃統編）',()=>fetch('https://www.tpex.org.tw/openapi/v1/mopsfe_t187ap03_O').then(r=>r.json()).then(d=>d.length+' 筆')],
+  ['台灣公司資料 API（商工）',()=>companyGet('/show/22099131').then(d=>d&&d.data?'正常':'無資料')],
+  ['政府採購 API（標案）',()=>pccGet('/getinfo').then(()=>'正常')]];
+  $('testOut').innerHTML='<p class="sub">檢查中…</p>';let h='';for(const[n,f]of T){try{h+=`<div><span class="flag f-ok">可連線</span>${esc(n)}：${esc(await f())}</div>`}catch(e){h+=`<div><span class="flag f-bad">失敗</span>${esc(n)}：${esc(e.message)}</div>`}$('testOut').innerHTML=h}};
+ $('eWipe').onclick=()=>{dialog('<h2>確定清除？</h2><p>建議先匯出 JSON。清除後無法復原。</p><div class="row"><button id="eY">清除</button><button class="ghost" id="eNo">取消</button></div>');
+  $('eY').onclick=()=>{DB.cases={};DB.current=null;save();closeDlg();renderAll()};$('eNo').onclick=closeDlg}};
+$('btnHelp').onclick=()=>msg(`<b>使用順序</b><br>1. 輸入股票代號與統編，載入商工資料。<br>2. 從觀測站讀財報附註、年報、重訊、法說資料，把重點記入四欄並標出處。<br>3. 把附註中的具名交易對手加入步驟 3，按「核對」比對代表人、董監事、法人代表與地址。<br>4. 每季「新增一期」，逐條驗證上一期的指標。<br><br><b>判讀原則</b><br>・同名不等於同一人：自然人同名一律列「待確認」。<br>・統編相符、同法人代表、同地址屬登記事實，可列入已確認事實。<br>・查不到不代表沒有關係，可能是外國法人或名稱不同。<br><br><b>資料與隱私</b><br>紀錄只存在本機瀏覽器，換電腦或清除瀏覽資料前請先匯出 JSON。<br>商工資料來自 g0v 台灣公司資料（經濟部每月異動、財政部每日稅籍），以官方系統為準。`);
+/* ---------- stock search & auto-link ---------- */
+const FM='https://api.finmindtrade.com/api/v4/data';
+async function fmGet(params){const q=new URLSearchParams(params);if(DB.settings.fmToken)q.set('token',DB.settings.fmToken);
+ const r=await fetch(FM+'?'+q.toString());if(r.status===402)throw new Error('FinMind 本小時查詢次數已滿（免費每小時 300 次），請稍後再試或在設定填入個人 Token');
+ if(!r.ok)throw new Error('FinMind HTTP '+r.status);const d=await r.json();if(d.status&&d.status!==200)throw new Error('FinMind：'+(d.msg||d.status));return d.data||[]}
+function cacheGet(k,maxH){try{const o=JSON.parse(localStorage.getItem(k)||'null');if(o&&Date.now()-o.t<maxH*3600e3)return o.d}catch(e){}return null}
+function cacheSet(k,d){try{localStorage.setItem(k,JSON.stringify({t:Date.now(),d}))}catch(e){}}
+let STOCKS=null,stocksLoading=null;
+const MKT={twse:'上市',tpex:'上櫃',emerging:'興櫃'};
+async function loadStocks(){if(STOCKS)return STOCKS;if(stocksLoading)return stocksLoading;
+ stocksLoading=(async()=>{let d=cacheGet('itv.stocks',24);
+  if(!d){const rows=await fmGet({dataset:'TaiwanStockInfo'});const m=new Map();
+   rows.forEach(r=>{if(!r.stock_id||r.stock_id.length>6)return;const o=m.get(r.stock_id);if(!o||String(r.date)>String(o[4]))m.set(r.stock_id,[r.stock_id,r.stock_name,r.industry_category,r.type,String(r.date||'')])});
+   d=[...m.values()].sort((a,b)=>a[0].localeCompare(b[0]));cacheSet('itv.stocks',d)}
+  STOCKS=d;$('stkNote').textContent=`股票清單 ${d.length} 檔（FinMind，每日更新快取）`;return d})();
+ try{return await stocksLoading}finally{stocksLoading=null}}
+function searchStocks(q){q=fw(q).trim().toLowerCase();if(!q||!STOCKS)return[];
+ const ex=[],pre=[],inc=[];STOCKS.forEach(s=>{const id=s[0].toLowerCase(),nm=String(s[1]).toLowerCase(),ind=String(s[2]||'').toLowerCase();
+  if(id===q||nm===q)ex.push(s);else if(id.startsWith(q)||nm.startsWith(q))pre.push(s);else if(nm.includes(q)||ind.includes(q))inc.push(s)});
+ return[...ex,...pre,...inc].slice(0,30)}
+function renderSuggest(list){const box=$('stkList');
+ if(!list.length){box.innerHTML=$('stkQ').value.trim()?'<div class="sg sub">找不到符合的股票</div>':'';box.style.display=$('stkQ').value.trim()?'block':'none';return}
+ box.innerHTML=list.map((s,i)=>`<button type="button" class="sg${i===0?' on':''}" data-id="${esc(s[0])}"><b>${esc(s[0])}</b>　${esc(s[1])}<span class="sub">　${esc(s[2]||'')}・${esc(MKT[s[3]]||s[3]||'')}</span></button>`).join('');box.style.display='block';
+ box.querySelectorAll('button').forEach(b=>b.onclick=()=>pickStock(b.dataset.id))}
+let sgTimer=null;
+$('stkQ').oninput=()=>{clearTimeout(sgTimer);sgTimer=setTimeout(async()=>{try{await loadStocks();renderSuggest(searchStocks($('stkQ').value))}catch(e){$('stkList').innerHTML=`<div class="sg"><span class="flag f-bad">股票清單載入失敗</span> ${esc(e.message)}。仍可在下方直接輸入股票代號。</div>`;$('stkList').style.display='block'}},180)};
+$('stkQ').onfocus=()=>{loadStocks().catch(()=>{})};
+$('stkQ').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();const f=$('stkList').querySelector('button.sg');if(f)pickStock(f.dataset.id)}if(e.key==='Escape')$('stkList').style.display='none'};
+document.addEventListener('click',e=>{if(!e.target.closest('.stkwrap'))$('stkList').style.display='none'});
+
+/* 上市櫃公司基本資料 → 統編、公司全名 */
+const pickKey=(row,res)=>{for(const k of Object.keys(row))if(res.some(r=>r.test(k)))return row[k];return''};
+async function basicInfo(id){let list=cacheGet('itv.basic',24);
+ if(!list){list={};const srcs=[['https://openapi.twse.com.tw/v1/opendata/t187ap03_L','上市'],['https://www.tpex.org.tw/openapi/v1/mopsfe_t187ap03_O','上櫃']];
+  for(const[u,m]of srcs){try{const r=await fetch(u);if(!r.ok)continue;const rows=await r.json();
+   rows.forEach(row=>{const code=String(pickKey(row,[/^公司代號$/,/CompanyCode/i,/^SecuritiesCompanyCode$/i])).trim();const ban=String(pickKey(row,[/統一編號/,/UnifiedBusinessNo/i,/BusinessNo/i])).replace(/\D/g,'');
+    if(code)list[code]={ban,full:String(pickKey(row,[/^公司名稱$/,/^CompanyName$/i])).trim(),chair:String(pickKey(row,[/^董事長$/,/Chairman/i])).trim(),addr:String(pickKey(row,[/^住址$/,/^Address$/i])).trim(),mkt:m}})}catch(e){}}
+  if(Object.keys(list).length)cacheSet('itv.basic',list)}
+ return list[id]||null}
+async function banByName(short,full){ // fallback: 台灣公司資料 API
+ for(const n of [full,short+'股份有限公司'].filter(Boolean)){try{const id=await resolveBan(n);if(id)return{ban:id,full:n}}catch(e){}}
+ try{const r=await companyGet('/search?q='+encodeURIComponent(short));const hit=(r.data||[]).find(x=>String(x['公司名稱']||'').includes(short)&&/股份有限公司$/.test(x['公司名稱']||''));
+  if(hit)return{ban:String(hit['統一編號']||''),full:hit['公司名稱'],guess:true}}catch(e){}
+ return null}
+async function pickStock(id){const s=(STOCKS||[]).find(x=>x[0]===id);$('stkList').style.display='none';$('stkQ').value='';
+ let c=cur();
+ if(c.ticker&&c.ticker!==id){ // 已有其他標的：開新卷宗，避免覆蓋
+  newCase(true);c=cur()}
+ c.ticker=id;c.name=s?s[1]:id;c.industry=s?s[2]:'';c.market=s?MKT[s[3]]||s[3]:'';save();renderAll();
+ setStatus('正在找統一編號…');
+ let info=null;try{info=await basicInfo(id)}catch(e){}
+ if(info&&info.ban){c.ban=info.ban;c.fullName=info.full;c.banSrc=`${info.mkt}公司基本資料（證交所／櫃買中心 OpenAPI）`}
+ else{const r=await banByName(c.name,info&&info.full);if(r&&r.ban){c.ban=r.ban;c.fullName=r.full;c.banSrc=r.guess?'台灣公司資料 API 名稱搜尋（請核對是否為同一家）':'台灣公司資料 API 名稱比對'}}
+ save();renderTarget();renderMops();
+ const jobs=[];
+ if(c.ban)jobs.push(loadTarget(true));else msg('找不到這檔股票的統一編號（興櫃、外國企業或 ETF 常見），可在下方手動輸入統編後按「載入商工資料」。','warn');
+ if(!/^00/.test(id))jobs.push(loadFin(true));else{c.fin={err:'ETF 無公司財報'};renderFin()}
+ jobs.push(loadRpt());
+ await Promise.allSettled(jobs);setStatus('');
+ const d=RPT[id];if(d&&d.quarters&&d.quarters.length&&!c.cps.length){const n=importRpt(0,false);if(n){setStatus(`已從 ${d.quarters[0].roc} 財報帶入 ${n} 筆關係人，開始自動核對…`);await runAuto()}}}
+function setStatus(t){$('autoStatus').textContent=t}
+async function loadTarget(quiet){const c=cur();if(!/^\d{8}$/.test(c.ban)){if(!quiet)msg('統一編號需為 8 碼數字。','warn');return}
+ setStatus('正在載入商工登記…');
+ try{const r=await companyGet('/show/'+c.ban);c.target=summary(r&&r.data);c.targetAt=now();
+  if(!c.target||(!c.target.name&&!c.target.dirs.length))msg('查無此統編的登記資料。','warn');
+  c.cps.forEach(p=>{if(p.reg)p.flags=compare(c.target,c.ban,p.reg,p.ban)});save();renderAll()}
+ catch(err){msg('商工資料載入失敗：'+esc(err.message),'err')}}
+
+/* ---------- 歷年財報 ---------- */
+const qLabel=d=>{const [y,m]=String(d).split('-').map(Number);return`${y-1911}Q${Math.ceil(m/3)}`};
+const MET=[ // [key,label,dataset,types,originRegex,kind]
+ ['rev','營業收入','is',['Revenue'],/^營業收入(合計)?$|^收入合計$|^淨收益$/],
+ ['gp','營業毛利','is',['GrossProfit'],/^營業毛利（毛損）(淨額)?$|^營業毛利/],
+ ['op','營業利益','is',['OperatingIncome'],/^營業利益（損失）$|^營業利益/],
+ ['pti','稅前淨利','is',['PreTaxIncome'],/^稅前淨利（淨損）$|^繼續營業單位稅前/],
+ ['ni','稅後淨利','is',['IncomeAfterTaxes'],/^本期淨利（淨損）$|^本期稅後淨利/],
+ ['eps','EPS（元）','is',['EPS'],/^基本每股盈餘/],
+ ['ta','資產總計','bs',['TotalAssets'],/^資產總(計|額)$/],
+ ['tl','負債總計','bs',['Liabilities'],/^負債總(計|額)$/],
+ ['eq','權益總計','bs',['Equity'],/^權益總(計|額)$/],
+ ['cash','現金及約當現金','bs',['CashAndCashEquivalents'],/^現金及約當現金$/],
+ ['ar','應收帳款淨額','bs',['AccountsReceivableNet'],/^應收帳款淨額$/],
+ ['inv','存貨','bs',['Inventories'],/^存貨$/],
+ ['ocf','營業活動現金流（單季）','cf',['CashFlowsFromOperatingActivities','NetCashInflowFromOperatingActivities'],/^營業活動之淨現金流入（流出）$/]];
+function pivot(rows){const by={};(rows||[]).forEach(r=>{if(/_per$/.test(r.type))return;const d=String(r.date);(by[d]=by[d]||[]).push(r)});return by}
+function findVal(list,types,re){if(!list)return null;let r=list.find(x=>types.includes(x.type));if(!r)r=list.find(x=>re.test(String(x.origin_name||'').trim()));return r?{v:+r.value,src:`${r.type}／${r.origin_name||''}`}:null}
+function computeFin(f){const IS=pivot(f.is),BS=pivot(f.bs),CF=pivot(f.cf);
+ const dates=[...new Set([...Object.keys(IS),...Object.keys(BS)])].sort().reverse().slice(0,f.nq||12);
+ const out={dates,rows:{}};
+ MET.forEach(([k,lab,ds,types,re])=>{out.rows[k]={label:lab,vals:{}};
+  dates.forEach(d=>{const src=ds==='is'?IS:ds==='bs'?BS:CF;let v=findVal(src[d],types,re);
+   if(v&&ds==='cf'){const[y,m]=d.split('-');if(+m>3){const prevD=Object.keys(CF).find(x=>x.startsWith(y+'-')&&+x.split('-')[1]===+m-3);const pv=prevD?findVal(CF[prevD],types,re):null;v=pv?{v:v.v-pv.v,src:v.src+'（累計相減）'}:null}}
+   out.rows[k].vals[d]=v})});
+ const ratio=(a,b,d)=>{const x=out.rows[a].vals[d],y=out.rows[b].vals[d];return x&&y&&y.v?{v:x.v/y.v*100,pct:true}:null};
+ out.rows.gm={label:'毛利率',vals:{}};out.rows.om={label:'營益率',vals:{}};out.rows.dr={label:'負債比',vals:{}};out.rows.revyoy={label:'營收年增率',vals:{}};
+ dates.forEach(d=>{out.rows.gm.vals[d]=ratio('gp','rev',d);out.rows.om.vals[d]=ratio('op','rev',d);out.rows.dr.vals[d]=ratio('tl','ta',d);
+  const[y,m,dd]=d.split('-');const ly=`${+y-1}-${m}-${dd}`;const a=out.rows.rev.vals[d];const allIS=IS[ly]?findVal(IS[ly],['Revenue'],MET[0][4]):null;out.rows.revyoy.vals[d]=a&&allIS&&allIS.v?{v:(a.v/allIS.v-1)*100,pct:true}:null});
+ // 年增：應收、存貨
+ const yoy=(k,d)=>{const[y,m,dd]=d.split('-');const ly=`${+y-1}-${m}-${dd}`;const a=out.rows[k].vals[d];const src=k==='rev'?IS:BS;const t=MET.find(x=>x[0]===k);const b=src[ly]?findVal(src[ly],t[3],t[4]):null;return a&&b&&b.v?(a.v/b.v-1)*100:null};
+ out.flags=[];const d0=dates[0];
+ if(d0){const ry=yoy('rev',d0),ay=yoy('ar',d0),iy=yoy('inv',d0);
+  if(ry!=null&&ay!=null&&ay-ry>20)out.flags.push(`${qLabel(d0)} 應收帳款年增 ${ay.toFixed(1)}%，高於營收年增 ${ry.toFixed(1)}%（差距逾 20 個百分點）`);
+  if(ry!=null&&iy!=null&&iy-ry>20)out.flags.push(`${qLabel(d0)} 存貨年增 ${iy.toFixed(1)}%，高於營收年增 ${ry.toFixed(1)}%（差距逾 20 個百分點）`);
+  const g0=out.rows.gm.vals[d0],g1=dates[1]&&out.rows.gm.vals[dates[1]];if(g0&&g1&&g1.v-g0.v>3)out.flags.push(`${qLabel(d0)} 毛利率 ${g0.v.toFixed(1)}%，較上季 ${g1.v.toFixed(1)}% 下滑逾 3 個百分點`);
+  const last4=dates.slice(0,4);const ocf=last4.map(d=>out.rows.ocf.vals[d]),ni=last4.map(d=>out.rows.ni.vals[d]);
+  if(ocf.every(Boolean)&&ni.every(Boolean)){const so=ocf.reduce((a,b)=>a+b.v,0),sn=ni.reduce((a,b)=>a+b.v,0);if(sn>0&&so<sn*.5)out.flags.push(`近四季營業現金流合計 ${fmtN(so)}，不到稅後淨利合計 ${fmtN(sn)} 的一半`)}
+  const negQ=dates.slice(0,4).filter(d=>out.rows.ocf.vals[d]&&out.rows.ocf.vals[d].v<0).length;if(negQ>=2)out.flags.push(`近四季有 ${negQ} 季營業現金流為負`)}
+ return out}
+const fmtN=v=>{if(v==null||isNaN(v))return'—';const a=Math.abs(v);return a>=1e8?(v/1e8).toFixed(2)+' 億':a>=1e4?(v/1e4).toFixed(0)+' 萬':v.toLocaleString('zh-TW')};
+const fmtV=(k,x)=>!x?'—':x.pct?x.v.toFixed(1)+'%':k==='eps'?x.v.toFixed(2):fmtN(x.v);
+async function loadFin(quiet){const c=cur();if(!c.ticker){if(!quiet)msg('請先選擇股票。','warn');return}
+ setStatus('正在抓歷年財報…');const y=new Date().getFullYear();const sd=`${y-6}-01-01`,sm=`${y-3}-01-01`;
+ const id=c.ticker;const F={at:now(),from:sd};
+ const jobs=[['is','TaiwanStockFinancialStatements',sd],['bs','TaiwanStockBalanceSheet',sd],['cf','TaiwanStockCashFlowsStatement',sd],['mr','TaiwanStockMonthRevenue',sm],['dv','TaiwanStockDividend',`${y-8}-01-01`]];
+ const errs=[];
+ for(const[k,ds,st]of jobs){try{F[k]=await fmGet({dataset:ds,data_id:id,start_date:st})}catch(e){F[k]=[];errs.push(`${ds}：${e.message}`)}}
+ if(errs.length)F.errs=errs;c.fin=F;save();renderFin();setStatus('')}
+function renderFin(){const c=cur();const box=$('finBox');const F=c.fin;
+ if(!F){box.innerHTML='<p class="sub">選擇股票後會自動抓取近 6 年季報、近 3 年月營收與股利。</p>';return}
+ if(F.err){box.innerHTML=`<p class="sub">${esc(F.err)}</p>`;return}
+ const R=computeFin({...F,nq:+$('finNq').value||12});const ds=R.dates;
+ let h=`<div class="sub">來源：FinMind（原始資料為公開資訊觀測站財報），抓取 ${esc(F.at)}。金額單位：新臺幣元；損益與現金流為單季數字，資產負債為季末餘額。查無的科目顯示「—」，不推算。</div>`;
+ if(F.errs)h+=`<div class="msg err">${F.errs.map(esc).join('<br>')}</div>`;
+ if(!ds.length)h+='<p class="sub">查無季報資料。</p>';
+ else{
+  if(R.flags.length)h+=`<div class="msg warn"><b>財報觀察點（自動比對，非結論）</b><ul style="margin:4px 0 0;padding-left:20px">${R.flags.map((f,i)=>`<li>${esc(f)} <button class="ghost sm" data-ff="${i}">→尚缺證據</button></li>`).join('')}</ul></div>`;
+  const order=['rev','revyoy','gp','gm','op','om','ni','eps','ocf','cash','ar','inv','ta','tl','dr','eq'];
+  h+=`<div class="scroll"><table class="fin"><thead><tr><th>科目</th>${ds.map(d=>`<th class="num">${qLabel(d)}</th>`).join('')}</tr></thead><tbody>
+  ${order.map(k=>`<tr><td>${esc(R.rows[k].label)}</td>${ds.map(d=>{const x=R.rows[k].vals[d];return`<td class="num"${x&&x.src?` title="${esc(x.src)}"`:''}>${fmtV(k,x)}</td>`}).join('')}</tr>`).join('')}
+  </tbody></table></div>
+  <div class="row" style="margin-top:6px"><button class="ghost sm" id="finFact">最新一季重點數字 → 已確認事實</button></div>`}
+ // monthly revenue
+ const mr=(F.mr||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+ if(mr.length){const key=r=>`${r.revenue_year}-${r.revenue_month}`;const map=new Map(mr.map(r=>[key(r),r]));
+  h+=`<details open><summary>月營收（近 ${Math.min(mr.length,24)} 個月）</summary><div class="scroll"><table class="fin"><thead><tr><th>月份</th><th class="num">營收</th><th class="num">年增率</th></tr></thead><tbody>${mr.slice(0,24).map(r=>{const ly=map.get(`${r.revenue_year-1}-${r.revenue_month}`);const yy=ly&&ly.revenue?((r.revenue/ly.revenue-1)*100):null;
+   return`<tr><td>${r.revenue_year-1911}/${String(r.revenue_month).padStart(2,'0')}</td><td class="num">${fmtN(r.revenue)}</td><td class="num">${yy==null?'—':yy.toFixed(1)+'%'}</td></tr>`}).join('')}</tbody></table></div></details>`}
+ const dv=(F.dv||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+ if(dv.length)h+=`<details><summary>股利分派（${dv.length} 筆）</summary><div class="scroll"><table class="fin"><thead><tr><th>股利所屬</th><th class="num">現金股利（元/股）</th><th class="num">股票股利（元/股）</th><th>除息交易日</th></tr></thead><tbody>${dv.map(r=>`<tr><td>${esc(r.year)}</td><td class="num">${((+r.CashEarningsDistribution||0)+(+r.CashStatutorySurplus||0)).toFixed(2)}</td><td class="num">${((+r.StockEarningsDistribution||0)+(+r.StockStatutorySurplus||0)).toFixed(2)}</td><td>${esc(r.CashExDividendTradingDate||'')}</td></tr>`).join('')}</tbody></table></div></details>`;
+ h+=`<details><summary>全部科目原始資料</summary><div class="row"><label>報表<select id="finRaw"><option value="is">綜合損益表</option><option value="bs">資產負債表</option><option value="cf">現金流量表（累計數）</option></select></label></div><div id="finRawBox"></div></details>`;
+ box.innerHTML=h;
+ box.querySelectorAll('[data-ff]').forEach(b=>b.onclick=()=>{addItem('gap',R.flags[+b.dataset.ff],`FinMind 財報數據（抓取 ${F.at}），需回觀測站財報附註確認原因`);b.disabled=true;b.textContent='已加入'});
+ const ff=$('finFact');if(ff)ff.onclick=()=>{const d=ds[0];const pick=['rev','revyoy','gm','om','ni','eps','ocf'].map(k=>`${R.rows[k].label} ${fmtV(k,R.rows[k].vals[d])}`).join('、');
+  addItem('fact',`${qLabel(d)}：${pick}`,`FinMind 財報數據（原始：公開資訊觀測站），抓取 ${F.at}`);ff.disabled=true;ff.textContent='已加入'};
+ const rs=$('finRaw');if(rs){const draw=()=>{const P=pivot(F[rs.value]);const dd=Object.keys(P).sort().reverse().slice(0,8);const names=[];const seen=new Set();
+   dd.forEach(d=>P[d].forEach(r=>{const n=(r.origin_name||r.type);if(!seen.has(n)){seen.add(n);names.push(n)}}));
+   $('finRawBox').innerHTML=`<div class="scroll"><table class="fin"><thead><tr><th>科目</th>${dd.map(d=>`<th class="num">${qLabel(d)}</th>`).join('')}</tr></thead><tbody>${names.map(n=>`<tr><td>${esc(n)}</td>${dd.map(d=>{const r=P[d].find(x=>(x.origin_name||x.type)===n);return`<td class="num">${r?fmtN(+r.value):''}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`};rs.onchange=draw;draw()}}
+$('finReload').onclick=()=>loadFin();$('finNq').onchange=renderFin;
+$('btnLoadTarget').onclick=async e=>{const c=cur();c.ticker=$('tTicker').value.trim();c.name=$('tName').value.trim()||c.name;c.ban=$('tBan').value.trim();const b=e.target;b.disabled=true;await loadTarget();setStatus('');b.disabled=false};
+
+/* ---------- 關係人交易（觀測站財報附註，由 GitHub Actions 預先抓取） ---------- */
+const RPT={};
+const ENT_RE=/(股份有限公司|有限公司|公司|基金會|協會|學校|醫院|銀行|Co\.|Corp|Inc|Ltd|Limited|LLC|GmbH|B\.V\.|S\.A\.|Pte|Holding|Group|L\.P\.|Trust)/i;
+const isPersonName=n=>/^[一-鿿]{2,4}$/.test(n)&&!ENT_RE.test(n);
+const isForeign=n=>/[A-Za-z]/.test(n)&&!/[一-鿿]/.test(n);
+function partyType(n){return isPersonName(n)?'自然人':isForeign(n)?'外國法人':'法人'}
+function dataBase(){let b=(DB.settings.dataBase||'').trim();if(!b&&/^https?:$/.test(location.protocol))b=new URL('data/',location.href).href;if(b&&!b.endsWith('/'))b+='/';return b}
+function repoSlug(){if(DB.settings.repo)return DB.settings.repo.trim();const h=location.hostname;if(h.endsWith('.github.io')){const seg=location.pathname.split('/').filter(Boolean)[0];return h.split('.')[0]+'/'+(seg||h)}return''}
+function requestUrl(t){const r=repoSlug();return r?`https://github.com/${r}/issues/new?title=${encodeURIComponent('抓取 '+t)}&body=${encodeURIComponent('請抓取 '+t+' 的財報附註「關係人交易」。（送出後約 5～15 分鐘完成）')}`:''}
+async function loadRpt(){const c=cur();if(!c.ticker)return;const t=c.ticker,b=dataBase();
+ if(!b){RPT[t]={err:'nobase'};renderRpt();return}
+ setStatus('正在讀取關係人交易資料…');
+ try{const r=await fetch(b+'rpt/'+t+'.json',{cache:'no-cache'});if(r.status===404)RPT[t]={err:'none'};else{if(!r.ok)throw new Error('HTTP '+r.status);RPT[t]=await r.json();RPT[t].loadedAt=now()}}
+ catch(e){RPT[t]={err:'fail',msg:e.message}}
+ renderRpt()}
+function rptRowsFor(q,names){const out=[];(q.tables||[]).forEach(tb=>tb.rows.forEach(r=>{if(r.some(x=>names.some(n=>n&&x.includes(n))))out.push(`${tb.title?tb.title+'：':''}${r.join('｜')}`)}));return out.slice(0,8)}
+function roleOf(rel){return /子公司/.test(rel)?'關係人（子公司）':/關聯企業|合資/.test(rel)?'關係人（關聯企業）':/母公司|最終控制|最終母/.test(rel)?'關係人（母公司／控制者）':'關係人'}
+function importRpt(qi,withSched){const c=cur();const d=RPT[c.ticker];if(!d||!d.quarters||!d.quarters[qi])return 0;const q=d.quarters[qi];let n=0;
+ const has=nm=>c.cps.some(p=>normName(p.q)===normName(nm)||(p.reg&&normName(p.reg.name)===normName(nm)));
+ c.rpPersons=c.rpPersons||[];
+ q.parties.forEach(pt=>{const ty=partyType(pt.name);const rows=rptRowsFor(q,[pt.name,pt.alias]);
+  if(ty==='自然人'){if(!c.rpPersons.some(x=>x.name===pt.name)){c.rpPersons.push({name:pt.name,relation:pt.relation,ref:`${q.roc} 財報附註`,rows});n++}return}
+  if(has(pt.name))return;
+  c.cps.push({q:pt.name,role:roleOf(pt.relation),disc:(pt.alias?`簡稱「${pt.alias}」；`:'')+pt.relation,ref:`${q.roc} ${q.reportType}財報附註「關係人交易」`,rows,auto:true,reg:null,flags:[]});n++});
+ if(withSched)(q.schedules||[]).forEach(s=>s.tables.forEach(tb=>tb.rows.slice(1).forEach(r=>r.forEach(cell=>{const nm=cell.trim();
+  if(nm.length>3&&nm.length<60&&ENT_RE.test(nm)&&!/本公司|合計|小計|金額|期末|最高|餘額/.test(nm)&&!has(nm)){c.cps.push({q:nm,role:'附表：'+s.title.slice(0,20),disc:'',ref:`${q.roc} 財報附表`,auto:true,reg:null,flags:[]});n++}}))));
+ save();renderCps();renderRpt();renderToc();return n}
+function tableHtml(tb){return`<div class="scroll"><table class="fin rawt">${tb.title?`<caption>${esc(tb.title)}</caption>`:''}${tb.rows.map((r,i)=>`<tr>${r.map(x=>i===0?`<th>${esc(x)}</th>`:`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</table></div>`}
+function renderRpt(){const box=$('rptBox');const c=cur();if(!box)return;
+ if(!c.ticker){box.innerHTML='<p class="sub">選擇股票後，會自動讀取財報附註中的關係人交易。</p>';return}
+ if(c.rptLocal&&c.rptLocal.length&&(!RPT[c.ticker]||RPT[c.ticker].err))RPT[c.ticker]={quarters:[]};mergeRpt();
+ const d=RPT[c.ticker];
+ if(!d){box.innerHTML='<p class="sub">讀取中…</p>';return}
+ renderRptInner(box,c,d);
+ box.insertAdjacentHTML('beforeend',`<details ${d.quarters&&d.quarters.length?'':'open'}><summary>從觀測站匯入其他期別（貼上或拖入檔案）</summary>${localPanelHtml()}</details>`);bindLocalPanel()}
+function renderRptInner(box,c,d){
+ const mopsQ=`https://mopsov.twse.com.tw/mops/web/ezsearch?co_id=${encodeURIComponent(c.ticker)}`;
+ if(d.err){const req=requestUrl(c.ticker);
+  box.innerHTML=`<div class="msg">${d.err==='nobase'?'請用下方「從觀測站匯入財報」：在觀測站財報頁全選複製後貼上，即可自動擷取關係人交易。（若已架設 GitHub 自動抓取，可在「設定」填入資料網址。）':d.err==='none'?`${esc(c.ticker)} 在 GitHub 資料庫中還沒有抓取資料，可先用下方貼上方式匯入。`:'自動資料讀取失敗（'+esc(d.msg||'')+'），可用下方貼上方式匯入。'}
+  ${d.err==='none'&&req?`<br><a href="${esc(req)}" target="_blank" rel="noopener">→ 送出抓取請求（需 GitHub 帳號，約 5～15 分鐘完成）</a>`:''}
+  ${d.err==='none'&&!req?'<br>請管理者把代號加入 watchlist.txt，或在 GitHub Actions 手動執行。':''}
+  <br><a href="${mopsQ}" target="_blank" rel="noopener">或先到觀測站手動查閱</a></div>`;return}
+ const qs=d.quarters||[];if(!qs.length){box.innerHTML='<p class="sub">已抓取，但觀測站沒有可用的季報。</p>';return}
+ c.rpq=Math.min(c.rpq||0,qs.length-1);const q=qs[c.rpq];
+ const inCp=nm=>c.cps.some(p=>normName(p.q)===normName(nm))||(c.rpPersons||[]).some(x=>x.name===nm);
+ box.innerHTML=`<div class="row"><label>期別<select id="rpQ">${qs.map((x,i)=>`<option value="${i}" ${i===c.rpq?'selected':''}>${esc(x.roc)}（${esc(x.reportType)}）</option>`).join('')}</select></label>
+  <a class="ghost" href="${esc(q.url)}" target="_blank" rel="noopener" style="align-self:center">開啟觀測站原始財報</a></div>
+  <div class="sub">來源：${esc(d.source||'公開資訊觀測站')}｜抓取 ${esc(q.fetched||'')}｜金額單位 ${esc(q.unit||'未標示')}｜解析方式 ${q.how==='id'?'XBRL 段落代碼':'標題文字'}</div>
+  ${(q.notes||[]).length?`<div class="msg warn">${q.notes.map(esc).join('<br>')}</div>`:''}
+  <h3>具名關係人（${q.parties.length}）</h3>
+  ${q.parties.length?`<div class="scroll"><table class="stack"><thead><tr><th>名稱</th><th>簡稱</th><th>與公司之關係</th><th>類型</th><th>相關表格列</th><th>狀態</th></tr></thead><tbody>
+  ${q.parties.map(pt=>{const rows=rptRowsFor(q,[pt.name,pt.alias]);return`<tr><td data-l="名稱"><b>${esc(pt.name)}</b></td><td data-l="簡稱">${esc(pt.alias)}</td><td data-l="關係">${esc(pt.relation)}</td><td data-l="類型">${partyType(pt.name)}</td><td data-l="表格列" class="sub">${rows.map(esc).join('<br>')}</td><td data-l="狀態">${inCp(pt.name)?'<span class="flag f-ok">已帶入</span>':''}</td></tr>`}).join('')}
+  </tbody></table></div>`:'<p class="sub">本期未辨識出具名關係人（可能僅以類別揭露），請看下方原始表格。</p>'}
+  <div class="row" style="margin-top:8px"><button id="rpImport">帶入並自動核對、擴展集團、畫關係圖</button><label class="chk"><input type="checkbox" id="rpSched">附表對象（資金貸與、背書保證等）也帶入</label></div>
+  <details><summary>原始表格（${q.tables.length} 張）</summary>${q.tables.map(tableHtml).join('')||'<p class="sub">無</p>'}</details>
+  <details><summary>附表（${(q.schedules||[]).length} 份）</summary>${(q.schedules||[]).map(s=>`<h3>${esc(s.title)}</h3>${s.tables.map(tableHtml).join('')}`).join('')||'<p class="sub">未擷取到</p>'}</details>
+  <details><summary>附註原文</summary>${(q.texts||[]).map(t=>`<p style="white-space:pre-wrap;font-size:14px">${esc(t)}</p>`).join('')}</details>
+  <div class="row"><button class="ghost sm" id="rpFact">本期具名關係人清單 → 已確認事實</button></div>`;
+ $('rpQ').onchange=()=>{c.rpq=+$('rpQ').value;save();renderRpt()};
+ $('rpImport').onclick=async()=>{const n=importRpt(c.rpq,$('rpSched').checked);setStatus(`已帶入 ${n} 筆，開始自動核對…`);await runAuto()};
+ $('rpFact').onclick=e=>{addItem('fact',`${q.roc} 財報附註揭露具名關係人：${q.parties.map(p=>p.name+(p.relation?`（${p.relation}）`:'')).join('、')||'無'}`,`公開資訊觀測站 ${q.roc} ${q.reportType}財報附註「關係人交易」，${q.url}`);e.target.disabled=true;e.target.textContent='已加入'}}
+
+/* ---------- 瀏覽器內解析觀測站財報頁（貼上或拖入檔案） ---------- */
+const P_WS=s=>String(s||'').replace(/[\s　\xa0]+/g,' ').trim();
+const P_RPT_TITLE=/^(\(?[一二三四五六七八九十0-9]+[)、.．]?\s*)?關係人交易$/;
+const P_STOP=/^(\(?[一二三四五六七八九十0-9]+[)、.．]?\s*)?(質押之資產|重大或有負債|重大之災害損失|重大之期後事項|附註揭露事項|部門資訊|其他附註)/;
+const P_SCHED=[['資金貸與他人',/資金貸與他人/],['為他人背書保證',/為他人背書保證/],['與關係人進、銷貨達一億元或實收資本額20%以上',/與關係人進[、,，]?銷貨/],['應收關係人款項達一億元或實收資本額20%以上',/應收關係人款項達/],['母子公司間業務關係及重要交易往來',/母子公司間(之)?業務關係/]];
+const P_ALIAS=/[（(]\s*(?:以下)?簡稱\s*[「『]?([^）)」』]{1,20})[」』]?\s*[）)]/;
+const P_CAT=/^(子公司|關聯企業|合資|其他關係人|主要管理階層|母公司|最終母公司|實質關係人|董事|監察人|合計|小計|總計|其他|無此情形\/免揭露)$/;
+function pTokens(root){const out=[];const w=document.createTreeWalker(root,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT);let n=w.currentNode;
+ while(n){if(n.nodeType===1&&n.tagName==='TABLE'){const rows=[...n.rows].map(tr=>[...tr.cells].map(c=>P_WS(c.textContent))).filter(r=>r.some(Boolean));if(rows.length)out.push({t:'table',rows});
+   let nx=n;while(nx&&!nx.nextSibling&&nx!==root)nx=nx.parentNode;if(!nx||nx===root)break;w.currentNode=nx.nextSibling;n=w.currentNode;continue}
+  if(n.nodeType===1&&/^(SCRIPT|STYLE|HEAD)$/.test(n.tagName)){let nx=n;while(nx&&!nx.nextSibling&&nx!==root)nx=nx.parentNode;if(!nx||nx===root)break;w.currentNode=nx.nextSibling;n=w.currentNode;continue}
+  if(n.nodeType===3){const s=P_WS(n.nodeValue);if(s)out.push({t:'text',s})}
+  n=w.nextNode()}
+ return out}
+function pTablesFrom(tokens){const tables=[],texts=[];let lastText='';
+ tokens.forEach(k=>{if(k.t==='text'){texts.push(k.s);if(k.s.length>=2&&k.s.length<=60&&!/^[\d,.()\-\s]+$/.test(k.s))lastText=k.s}else{tables.push({title:lastText,rows:k.rows});lastText=''}});
+ return{tables,texts}}
+function pParties(tables){const out=[],seen=new Set();
+ const add=(name,rel,src)=>{name=P_WS(name);if(!name||name.length>80||P_CAT.test(name))return;let alias='';const m=name.match(P_ALIAS);if(m){alias=m[1].trim();name=P_WS(name.replace(P_ALIAS,''))}
+  if(seen.has(name))return;seen.add(name);out.push({name,alias,relation:P_WS(rel),src})};
+ tables.forEach(t=>{const rows=t.rows;const hi=rows.slice(0,3).findIndex(r=>r.some(c=>/關係人(名稱|姓名)|公司名稱|名稱/.test(c))&&r.some(c=>/關係/.test(c)));if(hi<0)return;
+  const h=rows[hi];const ni=h.findIndex(c=>/名稱|姓名/.test(c));let ri=h.findIndex((c,i)=>/關係/.test(c)&&i!==ni);
+  rows.slice(hi+1).forEach(r=>{if(ni<r.length)add(r[ni],ri>=0&&ri<r.length?r[ri]:'','關係人名稱及關係表')})});
+ if(!out.length)tables.forEach(t=>t.rows.forEach(r=>r.forEach((c,i)=>{if(ENT_RE.test(c)&&!/應收|應付|收入|進貨|銷貨|合計|金額|帳列|款項/.test(c))add(c,r[i+1]&&!/^[\d,.()\-\s]+$/.test(r[i+1])?r[i+1]:'','表格儲存格（後備規則）')})));
+ return out}
+function parseMopsHtml(html){const doc=new DOMParser().parseFromString(html,'text/html');const notes=[];let how='id';
+ let roots=[...doc.querySelectorAll('[id]')].filter(e=>/RelatedPart/i.test(e.id));roots=roots.filter(e=>!roots.some(o=>o!==e&&o.contains(e)));
+ let tokens=[];roots.forEach(r=>tokens.push(...pTokens(r)));
+ const all=pTokens(doc.body||doc.documentElement);
+ if(!tokens.length){how='title';const i=all.findIndex(k=>k.t==='text'&&P_RPT_TITLE.test(k.s));
+  if(i>=0){for(let j=i+1;j<all.length&&j<i+500;j++){const k=all[j];if(k.t==='text'&&k.s.length<40&&P_STOP.test(k.s))break;tokens.push(k)}}}
+ if(!tokens.length)notes.push('找不到「關係人交易」附註段落（請確認貼上的是「財務報告（含附註）」整頁）');
+ const{tables,texts}=pTablesFrom(tokens);
+ const um=texts.slice(0,8).join(' ').match(/單位[:：]\s*(新臺幣|新台幣)?\s*(仟元|千元|元|百萬元)/);
+ const parties=pParties(tables);if(tokens.length&&!parties.length)notes.push('有關係人交易段落，但未辨識出具名關係人（可能僅以類別揭露）');
+ const schedules=[];P_SCHED.forEach(([name,rx])=>{const i=all.findIndex(k=>k.t==='text'&&k.s.length<80&&rx.test(k.s));if(i<0)return;const tb=[];
+  for(let j=i+1;j<all.length&&tb.length<4;j++){const k=all[j];if(k.t==='table')tb.push({title:'',rows:k.rows});else if(tb.length&&k.s.length<60&&(P_SCHED.some(([,r])=>r.test(k.s))||/^附表/.test(k.s)))break}
+  if(tb.length)schedules.push({title:name,id:'',tables:tb})});
+ // 期別偵測
+ const head=all.slice(0,200).filter(k=>k.t==='text').map(k=>k.s).join(' ');let per=null;
+ const m1=head.match(/(\d{4})Q([1-4])/);const m2=head.match(/(?:民國)?\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+ if(m1)per={year:+m1[1],quarter:+m1[2]};else if(m2&&[3,6,9,12].includes(+m2[2]))per={year:+m2[1]+1911,quarter:+m2[2]/3};
+ return{how,unit:um?(um[1]||'新臺幣')+um[2]:'',parties,tables,texts:[...new Set(texts)].slice(0,20).map(t=>t.slice(0,4000)),schedules,notes,per}}
+function decodeBuf(buf){try{return new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){try{return new TextDecoder('big5').decode(buf)}catch(e2){return new TextDecoder().decode(buf)}}}
+function addLocalReport(html,srcLabel){const c=cur();if(!c.ticker)return msg('請先選擇股票。','warn');
+ const r=parseMopsHtml(html);const sel=$('lpQ').value.split('Q');let y=+sel[0],q=+sel[1];
+ if(r.per&&(r.per.year!==y||r.per.quarter!==q)){y=r.per.year;q=r.per.quarter}
+ const rid=$('lpType').value;const url=`https://mopsov.twse.com.tw/server-java/t164sb01?step=1&CO_ID=${encodeURIComponent(c.ticker)}&SYEAR=${y}&SSEASON=${q}&REPORT_ID=${rid}`;
+ const rec={year:y,quarter:q,roc:`${y-1911}Q${q}`,reportId:rid,reportType:rid==='C'?'合併':'個體',url,fetched:now()+'（'+srcLabel+'）',parser:'browser-1',...r};delete rec.per;
+ c.rptLocal=(c.rptLocal||[]).filter(x=>x.roc!==rec.roc);c.rptLocal.push(rec);c.rptLocal.sort((a,b)=>b.year-a.year||b.quarter-a.quarter);c.rpq=c.rptLocal.indexOf(rec);
+ mergeRpt();save();renderRpt();
+ msg(`已解析 ${esc(rec.roc)}：具名關係人 ${r.parties.length} 筆、表格 ${r.tables.length} 張、附表 ${r.schedules.length} 份。${r.notes.length?'<br>'+r.notes.map(esc).join('<br>'):''}${r.parties.length?'<br>請按「帶入並自動核對、擴展集團、畫關係圖」。':''}`,r.notes.length?'warn':'')}
+function mergeRpt(){const c=cur();if(!c.ticker)return;const base=RPT[c.ticker]&&RPT[c.ticker].quarters?RPT[c.ticker]:{quarters:[],source:'公開資訊觀測站財報附註'};
+ const loc=(c.rptLocal||[]);const qs=[...loc,...base.quarters.filter(x=>!loc.some(l=>l.roc===x.roc))].sort((a,b)=>b.year-a.year||b.quarter-a.quarter);
+ if(qs.length)RPT[c.ticker]={...base,quarters:qs,source:loc.length?'公開資訊觀測站財報附註（含本機匯入）':base.source}}
+function localPanelHtml(){const c=cur();const qs=recentQs(6);
+ return`<div class="card lp"><b>從觀測站匯入財報（不需 GitHub）</b>
+ <ol style="margin:6px 0;padding-left:20px;font-size:14px"><li>選期別後按「開啟觀測站財報」。</li><li>在財報頁按 <b>Ctrl+A</b> 全選、<b>Ctrl+C</b> 複製（手機：另存網頁或用電腦）。</li><li>回到這裡，點下方框框按 <b>Ctrl+V</b> 貼上；或把另存的財報 .html 檔拖進框框。</li></ol>
+ <div class="row"><label>期別<select id="lpQ">${qs.map(([y,q])=>`<option value="${y}Q${q}">${y-1911}Q${q}（${y} 年第 ${q} 季）</option>`).join('')}</select></label>
+ <label>報表<select id="lpType"><option value="C">合併</option><option value="A">個體（無子公司者）</option></select></label>
+ <a class="ghost" id="lpOpen" target="_blank" rel="noopener" style="align-self:center">開啟觀測站財報</a></div>
+ <div id="lpZone" class="lpzone" contenteditable="true" role="textbox" aria-label="貼上財報頁內容或拖入 html 檔">在這裡貼上（Ctrl+V）或拖入財報 .html 檔</div>
+ <div class="row"><input type="file" id="lpFile" accept=".html,.htm,text/html" hidden><button class="ghost sm" id="lpPick">選擇財報檔案</button></div></div>`}
+function recentQs(n){const d=new Date();let y=d.getFullYear(),q=Math.floor(d.getMonth()/3)+1;const out=[];for(let i=0;i<n;i++){q--;if(!q){y--;q=4}out.push([y,q])}return out}
+function bindLocalPanel(){const c=cur();const upd=()=>{const[y,q]=$('lpQ').value.split('Q');$('lpOpen').href=`https://mopsov.twse.com.tw/server-java/t164sb01?step=1&CO_ID=${encodeURIComponent(c.ticker)}&SYEAR=${y}&SSEASON=${q}&REPORT_ID=${$('lpType').value}`};
+ $('lpQ').onchange=upd;$('lpType').onchange=upd;upd();
+ const z=$('lpZone');
+ z.addEventListener('paste',e=>{e.preventDefault();const h=e.clipboardData.getData('text/html');const t=e.clipboardData.getData('text/plain');
+  if(h)addLocalReport(h,'貼上');else if(t)addLocalReport('<pre>'+esc(t).replace(/\n/g,'<br>')+'</pre>','貼上純文字');});
+ z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('on')});z.addEventListener('dragleave',()=>z.classList.remove('on'));
+ z.addEventListener('drop',async e=>{e.preventDefault();z.classList.remove('on');const f=e.dataTransfer.files[0];if(f)addLocalReport(decodeBuf(await f.arrayBuffer()),'檔案 '+f.name)});
+ z.addEventListener('input',()=>{z.textContent='在這裡貼上（Ctrl+V）或拖入財報 .html 檔'});
+ $('lpPick').onclick=()=>$('lpFile').click();$('lpFile').onchange=async e=>{const f=e.target.files[0];if(f)addLocalReport(decodeBuf(await f.arrayBuffer()),'檔案 '+f.name);e.target.value=''}}
+
+/* ---------- 集團擴展：以董監事（法人）、地址、代表人姓名 ---------- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function companyList(path){const r=await companyGet(path);let data=(r&&r.data)||[];const found=r&&r.found||data.length;
+ if(found>10){await sleep(300);try{const r2=await companyGet(path+'&page=2');data=data.concat((r2&&r2.data)||[])}catch(e){}}return{data,found}}
+const legalNames=row=>(row['董監事名單']||[]).map(d=>legalOf(d)).filter(Boolean).map(l=>normName(l.name));
+const personNames=row=>[row['代表人姓名'],...(row['董監事名單']||[]).map(d=>d['姓名']),...(row['經理人名單']||[]).map(m=>m['姓名'])].filter(Boolean).map(normName);
+async function expandCp(i){const c=cur();const p=c.cps[i];if(!p||!p.reg||!p.ban)return 0;c.grp=c.grp||{};const before=Object.keys(c.grp).length;
+ const addG=(row,type,label)=>{const ban=String(row['統一編號']||'').replace(/\D/g,'');if(!ban||ban===c.ban||ban===p.ban)return;
+  let g=c.grp[ban];if(!g)g=c.grp[ban]={ban,name:row['公司名稱']||'',reg:summary(row),via:[],score:0,flags:[]};
+  if(!g.via.some(v=>v.from===p.ban&&v.type===type&&v.label===label))g.via.push({from:p.ban,type,label})};
+ $('cpStatus').textContent='擴展集團：'+(p.reg.name||p.q);
+ const me=normName(p.reg.name);
+ try{const{data}=await companyList('/fund?q='+encodeURIComponent(p.reg.name));data.filter(r=>legalNames(r).includes(me)).forEach(r=>addG(r,'fund',`${p.reg.name} 擔任其法人董監事`))}catch(e){}
+ await sleep(400);
+ const legals=[...new Set(p.reg.dirs.filter(d=>d.legal&&d.legal.name).map(d=>normName(d.legal.name)))].slice(0,5);
+ for(const L of legals){try{const{data,found}=await companyList('/fund?q='+encodeURIComponent(L));if(found<=60)data.filter(r=>legalNames(r).includes(L)).forEach(r=>addG(r,'fund',`同由 ${L} 擔任法人董監事`));else p.fundCrowded=(p.fundCrowded||[]).concat(`${L}（${found} 家）`)}catch(e){}await sleep(400)}
+ if(p.reg.addr){const a=bldg(p.reg.addr);try{const{data,found}=await companyList('/search?q='+encodeURIComponent('address:'+a));if(found<=40)data.filter(r=>bldg(r['公司所在地']||'')===a).forEach(r=>addG(r,'addr','同門牌：'+a));else p.addrCrowded=found}catch(e){}await sleep(400)}
+ if(DB.settings.expandPerson!==false){const names=[...new Set([p.reg.rep,...p.reg.dirs.filter(d=>/董事長/.test(d.title)).map(d=>d.name)].filter(n=>n&&n.length>=2))].slice(0,2);
+  for(const nm of names){try{const{data,found}=await companyList('/name?q='+encodeURIComponent(nm));if(found<=15)data.filter(r=>personNames(r).includes(nm)).forEach(r=>addG(r,'pname',`同名代表人／董事長 ${nm}（未確認同一人）`));else p.nameCrowded=(p.nameCrowded||[]).concat(`${nm}（${found} 家，同名過多略過）`)}catch(e){}await sleep(400)}}
+ scoreGroups();p.expanded=now();save();return Object.keys(c.grp).length-before}
+function scoreGroups(){const c=cur();Object.values(c.grp||{}).forEach(g=>{g.flags=c.target?compare(c.target,c.ban,g.reg,g.ban).filter(f=>f.lv!=='bad'&&!/設立未滿|僅查到財政部/.test(f.text)):[];
+ g.score=g.flags.reduce((s,f)=>s+(f.col==='fact'?3:2),0)})}
+async function checkAll(onlyNew){const c=cur();for(let i=0;i<c.cps.length;i++){if(onlyNew&&(c.cps[i].reg||c.cps[i].err))continue;await checkCp(i);await sleep(900)}}
+async function expandAll(){const c=cur();for(let i=0;i<c.cps.length;i++){if(c.cps[i].reg&&!c.cps[i].expanded)await expandCp(i)}$('cpStatus').textContent='';renderCps()}
+let AUTO=false;
+async function runAuto(){if(AUTO)return;AUTO=true;try{setStatus('核對交易對手的商工登記…');await checkAll(true);setStatus('以董監事、地址擴展集團企業…');await expandAll();setStatus('');
+ const g=Object.values(cur().grp||{});const hot=g.filter(x=>x.score>0).length;
+ setStatus(`完成：交易對手 ${cur().cps.length} 家，擴展出集團企業 ${g.length} 家，其中 ${hot} 家與標的公司有登記重疊。`);
+ document.getElementById('s3g').scrollIntoView({behavior:'smooth'})}finally{AUTO=false}}
+$('btnExpandAll').onclick=async e=>{e.target.disabled=true;cur().cps.forEach(p=>delete p.expanded);await expandAll();e.target.disabled=false};
+
+/* ---------- relationship graph ---------- */
+const GC={ink:'#141414',hi:'#c62828',mid:'#f2c200',lo:'#9a9a94',blue:'#1d2bd8',line:'#b9b9b3'};
+function scoreOf(p){let s=0;(p.flags||[]).forEach(f=>{s+=f.lv==='bad'?3:f.lv==='hit'?(f.col==='fact'?3:2):1});return s}
+const levelOf=s=>s>=3?'hi':s>=1?'mid':'lo';
+let SIM=null,GDATA=null,gTimer=null;
+function buildGraph(){const c=cur();const N=new Map(),L=[];
+ const add=(id,o)=>{if(!N.has(id))N.set(id,{id,...o,cos:new Set()});else Object.assign(N.get(id),Object.fromEntries(Object.entries(o).filter(([k,v])=>v!=null&&v!=='')) );return N.get(id)};
+ const link=(a,b,type,label)=>{if(a!==b)L.push({source:a,target:b,type,label:label||''})};
+ if(!c.target&&!c.cps.length)return null;
+ const tid=c.ban?'c:'+c.ban:'c:target';
+ const ents=[];
+ add(tid,{kind:'target',label:c.target?.name||c.name||'標的公司',ban:c.ban,reg:c.target,score:0});
+ if(c.target)ents.push({id:tid,reg:c.target});
+ c.cps.forEach((p,i)=>{const sc=scoreOf(p);
+  if(p.reg&&p.ban){const id='c:'+p.ban;add(id,{kind:'cp',label:p.reg.name||p.q,ban:p.ban,reg:p.reg,score:sc,cp:i});ents.push({id,reg:p.reg});link(tid,id,'tx',p.role+(p.disc?'｜'+p.disc:''))}
+  else{const id='u:'+i;add(id,{kind:'unknown',label:p.q,score:p.err?1:0,cp:i,err:p.err||'未核對'});link(tid,id,'tx',p.role+(p.disc?'｜'+p.disc:''))}});
+ // 集團擴展出的公司
+ Object.values(c.grp||{}).forEach(g=>{const id='c:'+g.ban;if(!N.has(id)){add(id,{kind:'grp',label:g.name,ban:g.ban,reg:g.reg,score:g.score||0,grp:g});ents.push({id,reg:g.reg})}
+  else if(N.get(id).kind==='legal'){Object.assign(N.get(id),{kind:'grp',reg:g.reg,score:g.score||0,grp:g});ents.push({id,reg:g.reg})}
+  g.via.forEach(v=>{const from='c:'+v.from;if(N.has(from))link(from,id,v.type==='fund'?'fund':v.type==='pname'?'pname':'addr2',v.type==='addr'?'同門牌':v.type==='fund'?'法人董監事':'同名')})});
+ // 財報揭露的自然人關係人
+ (c.rpPersons||[]).forEach(pp=>{const n=add('p:'+pp.name,{kind:'person',label:pp.name});n.cos.add(tid);n.rp=true;(n.roles=n.roles||[]).push(`財報揭露關係人：${pp.relation}`);link('p:'+pp.name,tid,'rp',pp.relation.slice(0,10))});
+ ents.forEach(e=>{const r=e.reg;
+  const person=(name,role)=>{if(!name)return;const n=add('p:'+name,{kind:'person',label:name});n.cos.add(e.id);(n.roles=n.roles||[]).push(`${N.get(e.id).label}：${role}`);link('p:'+name,e.id,'person',role)};
+  if(r.rep)person(r.rep,'代表人');
+  r.dirs.forEach(d=>{if(d.legal&&(d.legal.id||d.legal.name)){const lid=d.legal.id?'c:'+d.legal.id:'n:'+d.legal.name;
+    const ln=add(lid,{kind:N.has(lid)&&N.get(lid).kind!=='legal'?undefined:'legal',label:d.legal.name||d.legal.id,ban:d.legal.id||''});
+    if(!ln.kind)ln.kind='legal';ln.cos.add(e.id);(ln.roles=ln.roles||[]).push(`${N.get(e.id).label}：法人${d.title}（代表人 ${d.name}）`);link(lid,e.id,'legal',d.title)}
+   if(d.name&&d.name!==r.rep)person(d.name,d.title)});
+  r.managers.forEach(m=>{if(m&&m!==r.rep)person(m,'經理人')})});
+ // same address
+ for(let i=0;i<ents.length;i++)for(let j=i+1;j<ents.length;j++){const a=ents[i].reg.addr,b=ents[j].reg.addr;if(a&&b&&bldg(a)===bldg(b))link(ents[i].id,ents[j].id,'addr',normAddr(a)===normAddr(b)?'同地址':'同門牌')}
+ // warn marks
+ N.forEach(n=>{if(n.kind==='person'){const k=n.cos.size;n.shared=k>=2;n.warn=k>=2?'mid':null}
+  if(n.kind==='legal'||(n.kind==='target'&&n.cos.size)||(n.kind==='cp'&&n.cos.size)){if(n.cos.size>=2||(n.cos.size>=1&&n.kind!=='legal'))n.bridge=true;if(n.kind==='legal'&&n.cos.size>=2)n.warn='hi'}});
+ // groups (union-find over registry facts)
+ const P={};const f=x=>P[x]===undefined?(P[x]=x):P[x]===x?x:(P[x]=f(P[x]));const u=(a,b)=>{P[f(a)]=f(b)};
+ L.forEach(l=>{if(l.type==='addr'||l.type==='addr2'||l.type==='fund')u(l.source,l.target);if(l.type==='legal'){const src=N.get(l.source);if(src.kind!=='legal')u(l.source,l.target)}});
+ N.forEach(n=>{if(n.kind==='legal'&&n.cos.size>=2){const a=[...n.cos];a.forEach(x=>u(x,a[0]));u(n.id,a[0])}});
+ const G={};N.forEach(n=>{if(['target','cp','legal','grp'].includes(n.kind)&&P[n.id]!==undefined){const r=f(n.id);(G[r]=G[r]||[]).push(n.id)}});
+ const groups=Object.values(G).filter(g=>g.filter(id=>N.get(id).kind!=='legal').length>=2||g.length>=3);
+ return{nodes:[...N.values()].map(n=>({...n,cos:[...n.cos]})),links:L,groups,tid}}
+function nodeColor(n){if(n.kind==='target')return GC.ink;if(n.kind==='unknown')return'#fff';
+ if(n.kind==='cp')return GC[levelOf(n.score)];if(n.kind==='grp')return n.score>=3?GC.hi:n.score>0?GC.mid:'#d9c3a0';if(n.kind==='legal')return n.warn==='hi'?GC.hi:'#5d5d58';
+ return n.warn?GC.mid:'#c9c9c4'}
+function scheduleGraph(){clearTimeout(gTimer);gTimer=setTimeout(renderGraph,60)}
+function gp(){const c=cur();c.gp=c.gp||{};const g=c.gp;g.ns=g.ns||{};g.box=g.box||{};g.scale=g.scale||1;g.font=g.font||1;return g}
+function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML='<p class="sub">關係圖元件（d3）載入失敗，請確認網路可連到 cdnjs.cloudflare.com。</p>';return}
+ const full=buildGraph();renderWatch(full);const svg=d3.select(svgEl);svg.selectAll('*').remove();if(SIM)SIM.stop();$('gTool').style.display='none';
+ if(!full){svg.append('text').attr('x',20).attr('y',30).attr('fill','#5d5d58').text('載入標的公司並加入交易對手後，關係圖會出現在這裡。');return}
+ const P=gp();$('gScale').value=P.scale;$('gFont').value=P.font;
+ const showAll=$('gAll').checked,focus=$('gFocus').checked;
+ let keep=new Set(full.nodes.filter(n=>(n.kind!=='person'||n.shared||n.rp||showAll)&&(n.kind!=='legal'||n.cos.length>=2||showAll)).map(n=>n.id));
+ if(focus){const risky=new Set(full.nodes.filter(n=>((n.kind==='cp'||n.kind==='grp')&&n.score>0)||n.kind==='unknown'||n.warn||n.rp).map(n=>n.id));risky.add(full.tid);
+  full.nodes.forEach(n=>{if((n.kind==='person'||n.kind==='legal')&&n.warn)n.cos.forEach(x=>risky.add(x))});keep=new Set([...keep].filter(x=>risky.has(x)))}
+ const nodes=full.nodes.filter(n=>keep.has(n.id)).map(n=>({...n}));const byId=new Map(nodes.map(n=>[n.id,n]));
+ const links=full.links.filter(l=>byId.has(l.source)&&byId.has(l.target)).map(l=>({...l}));
+ const W=svgEl.clientWidth||800,H=svgEl.clientHeight||600,K=Math.max(.45,Math.min(1,W/820));
+ svg.attr('viewBox',`0 0 ${W} ${H}`);svg.append('rect').attr('class','bg').attr('width',W).attr('height',H).attr('fill','#fff');
+ const root=svg.append('g');
+ const zoom=d3.zoom().scaleExtent([.2,4]).filter(e=>!(e.type==='wheel'&&e.shiftKey)&&!e.button).on('zoom',e=>root.attr('transform',e.transform));svg.call(zoom);
+ const boxG=root.append('g'),linkG=root.append('g'),labG=root.append('g'),nodeG=root.append('g');
+ const t=byId.get(full.tid);if(t){t.fx=W/2;t.fy=H/2}
+ const BASE=n=>n.kind==='target'?24:n.kind==='cp'||n.kind==='unknown'?15:n.kind==='legal'?11:n.kind==='grp'?10:6;
+ const R=n=>BASE(n)*P.scale*(P.ns[n.id]||1);
+ const FS=n=>(n.kind==='person'?11:12)*P.font*Math.sqrt(P.ns[n.id]||1);
+ /* ---- group boxes (resizable) ---- */
+ const groups=full.groups.map(g=>g.filter(id=>byId.has(id))).filter(g=>g.length>=2).map(g=>({ids:g,key:[...g].sort().join('|')}));
+ groups.forEach(g=>{g.o=P.box[g.key]=P.box[g.key]||{l:0,t:0,r:0,b:0}});
+ const box=boxG.selectAll('g.box').data(groups).join('g').attr('class','box');
+ box.append('rect').attr('class','frame').attr('rx',14).attr('fill','#ffe600').attr('fill-opacity',.16).attr('stroke','#c9a800').attr('stroke-width',1.5).attr('stroke-dasharray','5 3').style('cursor','move');
+ box.append('text').attr('class','btitle').attr('font-size',11).attr('fill','#7a6200').text('疑似同集團（登記事實）');
+ const corners=['nw','ne','sw','se'];
+ box.selectAll('rect.h').data(g=>corners.map(k=>({g,k}))).join('rect').attr('class','h').attr('width',14).attr('height',14).attr('rx',3)
+  .attr('fill','#fff').attr('stroke','#9a7b00').attr('stroke-width',1.5).style('cursor',d=>d.k==='nw'||d.k==='se'?'nwse-resize':'nesw-resize');
+ const bbox=g=>{let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;g.ids.forEach(id=>{const n=byId.get(id),r=R(n)+20;x0=Math.min(x0,n.x-r);y0=Math.min(y0,n.y-r);x1=Math.max(x1,n.x+r);y1=Math.max(y1,n.y+r+FS(n)+4)});
+  const o=g.o;let X0=x0-o.l,Y0=y0-18-o.t,X1=x1+o.r,Y1=y1+o.b;if(X1-X0<40)X1=X0+40;if(Y1-Y0<40)Y1=Y0+40;return{x:X0,y:Y0,w:X1-X0,h:Y1-Y0}};
+ const drawBoxes=()=>{box.each(function(g){const b=bbox(g);g.b=b;const s=d3.select(this);
+  s.select('rect.frame').attr('x',b.x).attr('y',b.y).attr('width',b.w).attr('height',b.h);
+  s.select('text.btitle').attr('x',b.x+10).attr('y',b.y+15);
+  s.selectAll('rect.h').attr('x',d=>(d.k[1]==='w'?b.x:b.x+b.w)-7).attr('y',d=>(d.k[0]==='n'?b.y:b.y+b.h)-7)})};
+ box.selectAll('rect.h').call(d3.drag().on('start',e=>e.sourceEvent.stopPropagation()).on('drag',(e,d)=>{const o=d.g.o;
+  if(d.k[1]==='w')o.l-=e.dx;else o.r+=e.dx;if(d.k[0]==='n')o.t-=e.dy;else o.b+=e.dy;drawBoxes()}).on('end',()=>save()));
+ box.select('rect.frame').call(d3.drag().on('start',(e,g)=>{if(!e.active)SIM.alphaTarget(.1).restart();g.ids.forEach(id=>{const n=byId.get(id);n.fx=n.x;n.fy=n.y})})
+  .on('drag',(e,g)=>{g.ids.forEach(id=>{const n=byId.get(id);n.fx+=e.dx;n.fy+=e.dy})}).on('end',(e,g)=>{if(!e.active)SIM.alphaTarget(0)}));
+ box.on('dblclick',(e,g)=>{e.stopPropagation();g.o.l=g.o.t=g.o.r=g.o.b=0;save();drawBoxes()});
+ /* ---- links ---- */
+ const txColor=n=>n.kind==='unknown'?GC.lo:n.score>=3?GC.hi:n.score>=1?'#d4a900':'#6f6f6a';
+ const ln=linkG.selectAll('line').data(links).join('line')
+  .attr('stroke',l=>l.type==='tx'?txColor(byId.get(l.target)):l.type==='addr'||l.type==='addr2'?GC.hi:l.type==='legal'?'#5d5d58':l.type==='fund'?'#8a6d3b':l.type==='rp'?GC.blue:GC.line)
+  .attr('stroke-width',l=>l.type==='tx'?3:l.type==='addr'?2:l.type==='fund'||l.type==='rp'?1.6:1.2).attr('stroke-dasharray',l=>l.type==='addr'||l.type==='addr2'?'6 4':l.type==='person'||l.type==='pname'?'2 3':l.type==='rp'?'5 3':null);
+ const ll=labG.selectAll('text').data(links.filter(l=>l.type==='tx'||l.type==='addr')).join('text').attr('fill','#3a3a37').attr('text-anchor','middle').attr('paint-order','stroke').attr('stroke','#fff').attr('stroke-width',3).text(l=>l.label.length>16?l.label.slice(0,15)+'…':l.label);
+ /* ---- nodes ---- */
+ const ng=nodeG.selectAll('g').data(nodes).join('g').style('cursor','grab');
+ ng.each(function(n){const g=d3.select(this);
+  if(n.kind==='legal')g.append('path').attr('class','shape').attr('fill',nodeColor(n)).attr('stroke','#fff').attr('stroke-width',1.5);
+  else g.append('circle').attr('class','shape').attr('fill',nodeColor(n)).attr('stroke',n.kind==='unknown'?GC.lo:n.kind==='person'&&n.warn?'#9a7b00':'#fff').attr('stroke-width',n.kind==='unknown'?2:1.5).attr('stroke-dasharray',n.kind==='unknown'||(n.kind==='person'&&n.warn)?'3 2':null);
+  if(n.kind==='cp'&&n.score>=3)g.append('circle').attr('class','ring').attr('fill','none').attr('stroke',GC.hi).attr('stroke-width',2);
+  g.append('circle').attr('class','selring').attr('fill','none').attr('stroke',GC.blue).attr('stroke-width',2.5).attr('stroke-dasharray','4 3').attr('display','none');
+  g.append('text').attr('class','lab').text(n.label.length>14?n.label.slice(0,13)+'…':n.label).attr('text-anchor','middle').attr('font-weight',n.kind==='target'||n.score>=3?700:400).attr('fill','#141414').attr('paint-order','stroke').attr('stroke','#fff').attr('stroke-width',3);
+  if(n.kind==='person'&&n.warn)g.append('text').attr('class','tag').text('同名').attr('text-anchor','middle').attr('fill','#7a6200')});
+ const applySizes=()=>{ng.each(function(n){const g=d3.select(this),r=R(n);
+  g.select('circle.shape').attr('r',r);g.select('path.shape').attr('d',d3.symbol(d3.symbolDiamond,r*r*2.6)());
+  g.select('circle.ring').attr('r',r+5);g.select('circle.selring').attr('r',r+(n.kind==='cp'&&n.score>=3?10:6));
+  g.select('text.lab').attr('y',r+FS(n)+2).attr('font-size',FS(n));g.select('text.tag').attr('y',-r-4).attr('font-size',10*P.font)});
+  ll.attr('font-size',11*P.font);
+  if(SIM){SIM.force('collide',d3.forceCollide(n=>R(n)+18));SIM.alpha(.25).restart()}drawBoxes()};
+ /* tooltip */
+ const tip=$('gtip');
+ ng.on('mouseenter',(e,n)=>{tip.innerHTML=tipHtml(n);tip.style.display='block'}).on('mousemove',e=>{const b=$('gbox').getBoundingClientRect();let x=e.clientX-b.left+14,y=e.clientY-b.top+14;if(x>b.width-310)x-=330;tip.style.left=x+'px';tip.style.top=y+'px'}).on('mouseleave',()=>tip.style.display='none');
+ /* select + per-node resize */
+ const nb=id=>new Set([id,...links.filter(l=>l.source.id===id||l.target.id===id).flatMap(l=>[l.source.id,l.target.id])]);
+ let sel=null;
+ const applySel=()=>{const s=sel?nb(sel):null;ng.attr('opacity',n=>!s||s.has(n.id)?1:.12);ln.attr('opacity',l=>!s||(l.source.id===sel||l.target.id===sel)?1:.06);ll.attr('opacity',l=>!s||(l.source.id===sel||l.target.id===sel)?1:.06);
+  ng.select('circle.selring').attr('display',n=>n.id===sel?null:'none');
+  const tool=$('gTool');if(sel){const n=byId.get(sel);$('gToolName').textContent=n.label;$('gToolPct').textContent=Math.round((P.ns[sel]||1)*100)+'%';tool.style.display='flex'}else tool.style.display='none'};
+ const resizeNode=(id,f)=>{P.ns[id]=Math.max(.3,Math.min(5,(P.ns[id]||1)*f));if(Math.abs(P.ns[id]-1)<.02)delete P.ns[id];save();applySizes();applySel()};
+ ng.on('click',(e,n)=>{e.stopPropagation();sel=sel===n.id?null:n.id;applySel()});svg.on('click',()=>{sel=null;applySel()});
+ ng.on('wheel',(e,n)=>{if(!e.shiftKey)return;e.preventDefault();e.stopPropagation();resizeNode(n.id,e.deltaY<0?1.1:1/1.1)});
+ $('gToolMinus').onclick=()=>sel&&resizeNode(sel,1/1.2);$('gToolPlus').onclick=()=>sel&&resizeNode(sel,1.2);
+ $('gToolReset').onclick=()=>{if(sel){delete P.ns[sel];save();applySizes();applySel()}};
+ $('gScale').oninput=()=>{P.scale=+$('gScale').value;applySizes()};$('gScale').onchange=save;
+ $('gFont').oninput=()=>{P.font=+$('gFont').value;applySizes()};$('gFont').onchange=save;
+ GDATA={focus:id=>{sel=byId.has(id)?id:null;applySel()}};
+ ng.call(d3.drag().on('start',(e,n)=>{if(!e.active)SIM.alphaTarget(.2).restart();n.fx=n.x;n.fy=n.y}).on('drag',(e,n)=>{n.fx=e.x;n.fy=e.y}).on('end',(e,n)=>{if(!e.active)SIM.alphaTarget(0)}));
+ SIM=d3.forceSimulation(nodes).force('link',d3.forceLink(links).id(n=>n.id).distance(l=>K*(l.type==='tx'?230:l.type==='addr'?120:l.type==='legal'?110:l.type==='fund'||l.type==='addr2'||l.type==='pname'?95:l.type==='rp'?140:80)).strength(l=>l.type==='tx'?.5:.35))
+  .force('charge',d3.forceManyBody().strength(n=>K*(n.kind==='person'?-140:-650))).force('collide',d3.forceCollide(n=>R(n)+18)).force('x',d3.forceX(W/2).strength(.05)).force('y',d3.forceY(H/2).strength(.05)).force('center',d3.forceCenter(W/2,H/2))
+  .on('tick',()=>{nodes.forEach(n=>{const m=R(n)+30;if(n.fx==null){n.x=Math.max(m,Math.min(W-m,n.x));n.y=Math.max(m,Math.min(H-m-14,n.y))}});
+   ln.attr('x1',l=>l.source.x).attr('y1',l=>l.source.y).attr('x2',l=>l.target.x).attr('y2',l=>l.target.y);
+   ll.attr('x',l=>(l.source.x+l.target.x)/2).attr('y',l=>(l.source.y+l.target.y)/2-4);ng.attr('transform',n=>`translate(${n.x},${n.y})`);drawBoxes()});
+ applySizes();
+ if(t)setTimeout(()=>{t.fx=null;t.fy=null},2500)}
+function tipHtml(n){const r=n.reg;let h=`<b>${esc(n.label)}</b>`;
+ if(n.ban)h+=`<br>統編 ${esc(n.ban)}`;
+ if(r)h+=`<br>${esc(r.status)}・代表人 ${esc(r.rep)}<br>${esc(r.addr)}<br>設立 ${esc(r.est)}　董監事 ${r.dirs.length} 人`;
+ if(n.kind==='unknown')h+=`<br>${esc(n.err)}`;
+ if(n.kind==='cp'||n.kind==='unknown'){const p=cur().cps[n.cp];h+=`<br>附註：${esc(p.role)} ${esc(p.disc)} ${esc(p.ref)}`;(p.flags||[]).forEach(f=>h+=`<br>・${esc(f.text)}`)}
+ if(n.kind==='grp'){h+='<br><b>集團擴展依據</b>';n.grp.via.forEach(v=>h+=`<br>・${esc(v.label)}（由 ${esc((cur().cps.find(p=>p.ban===v.from)||{}).q||v.from)} 擴展）`);(n.grp.flags||[]).forEach(f=>h+=`<br>・<b>與標的：</b>${esc(f.text)}`)}
+ if(n.roles)h+='<br>'+[...new Set(n.roles)].map(esc).join('<br>');
+ if(n.kind==='person'&&n.warn)h+='<br><b>同名出現在多家公司，未確認為同一人</b>';
+ if(n.kind==='legal'&&n.cos.length>=2)h+='<br><b>同一法人在多家公司擔任董監事</b>';
+ return h}
+function renderWatch(full){const c=cur();const list=c.cps.map((p,i)=>({p,i,s:scoreOf(p)})).sort((a,b)=>b.s-a.s);
+ let h='';
+ if(full){const ppl=full.nodes.filter(n=>n.kind==='person'&&n.cos.length>=2&&n.cos.includes(full.tid));
+  const lg=full.nodes.filter(n=>n.kind==='legal'&&n.cos.length>=2);
+  const gh=full.nodes.filter(n=>n.kind==='grp'&&n.score>0).sort((a,b)=>b.score-a.score);
+  if(gh.length)h+=`<div class="w hi" data-n="${esc(gh[0].id)}"><b>集團企業與標的公司重疊 ${gh.length} 家</b><ul>${gh.map(n=>`<li>${esc(n.label)}：${esc((n.grp.flags||[]).map(f=>f.text).join('；'))}</li>`).join('')}</ul></div>`;
+  const gn=full.nodes.filter(n=>n.kind==='grp').length;if(gn)h+=`<div class="w lo"><b>擴展出的集團企業 ${gn} 家</b><div class="sub">依法人董監事、同門牌${DB.settings.expandPerson===false?'':'、代表人同名'}擴展；淡褐色節點</div></div>`;
+  const rpp=full.nodes.filter(n=>n.kind==='person'&&n.rp);if(rpp.length)h+=`<div class="w ${rpp.some(n=>n.cos.length>=2)?'mid':'lo'}" data-n="${esc(rpp[0].id)}"><b>財報揭露的自然人關係人 ${rpp.length} 位</b><ul>${rpp.map(n=>`<li>${esc(n.label)}${n.cos.length>=2?`：同名出現在其他 ${n.cos.length-1} 家公司董監事`:''}</li>`).join('')}</ul></div>`;
+  if(lg.length)h+=`<div class="w hi" data-n="${esc(lg[0].id)}"><b>橋接法人 ${lg.length} 個</b><ul>${lg.map(n=>`<li>${esc(n.label)}：同時出現在 ${n.cos.length} 家公司董監事名單</li>`).join('')}</ul></div>`;
+  if(ppl.length)h+=`<div class="w mid" data-n="${esc(ppl[0].id)}"><b>與標的公司同名的人 ${ppl.length} 位</b><ul>${ppl.map(n=>`<li>${esc(n.label)}（${n.cos.length} 家）</li>`).join('')}</ul></div>`}
+ h+=list.map(({p,i,s})=>{const lv=p.reg?levelOf(s):p.err?'mid':'lo';const id=p.reg&&p.ban?'c:'+p.ban:'u:'+i;
+  return`<div class="w ${lv}" data-n="${esc(id)}"><b>${esc(p.reg?.name||p.q)}</b> <span class="sub">${esc(p.role)}｜留意分數 ${s}</span>${(p.flags||[]).length?`<ul>${p.flags.map(f=>`<li>${esc(f.text)}</li>`).join('')}</ul>`:`<div class="sub">${p.reg?'未見登記重疊':esc(p.err||'未核對')}</div>`}</div>`}).join('');
+ $('watch').innerHTML=h||'<p class="sub">尚無交易對手。</p>';
+ $('watch').querySelectorAll('[data-n]').forEach(d=>d.onclick=()=>GDATA&&GDATA.focus(d.dataset.n))}
+function svgString(){const svg=$('gsvg').cloneNode(true);const W=$('gsvg').clientWidth||800,H=$('gsvg').clientHeight||600;
+ svg.setAttribute('xmlns','http://www.w3.org/2000/svg');svg.querySelectorAll('rect.h,circle.selring').forEach(x=>x.remove());svg.setAttribute('width',W);svg.setAttribute('height',H);svg.setAttribute('font-family','Noto Sans TC, PingFang TC, Microsoft JhengHei, sans-serif');
+ const c=cur();const cap=document.createElementNS('http://www.w3.org/2000/svg','text');cap.setAttribute('x',10);cap.setAttribute('y',H-10);cap.setAttribute('font-size',11);cap.setAttribute('fill','#5d5d58');
+ cap.textContent=`${c.ticker} ${c.name}｜商工資料：台灣公司資料 API｜輸出 ${now()}｜${VERSION}｜同名不等於同一人`;svg.appendChild(cap);
+ return new XMLSerializer().serializeToString(svg)}
+$('gResetSize').onclick=()=>{const c=cur();delete c.gp;save();renderGraph()};
+$('gFocus').onchange=renderGraph;$('gAll').onchange=renderGraph;$('gRelayout').onclick=renderGraph;
+$('gSvg').onclick=()=>download(`${cur().ticker||'標的'}_關係圖.svg`,svgString(),'image/svg+xml');
+$('gPng').onclick=()=>{const s=svgString();const img=new Image();const W=$('gsvg').clientWidth||800,H=$('gsvg').clientHeight||600;
+ img.onload=()=>{const cv=document.createElement('canvas');cv.width=W*2;cv.height=H*2;const x=cv.getContext('2d');x.scale(2,2);x.fillStyle='#fff';x.fillRect(0,0,W,H);x.drawImage(img,0,0);
+  cv.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`${cur().ticker||'標的'}_關係圖.png`;document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),500)})};
+ img.onerror=()=>msg('PNG 轉檔失敗，請改用下載 SVG。','err');img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s)};
+$('gPrint').onclick=()=>{document.body.classList.add('printgraph');setTimeout(()=>{window.print();document.body.classList.remove('printgraph')},100)};
+if(window.ResizeObserver)new ResizeObserver(()=>scheduleGraph()).observe($('gbox'));
+
+renderAll();
+}
+</script>
+</body>
+</html>
