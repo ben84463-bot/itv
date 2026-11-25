@@ -1,0 +1,31 @@
+name: 每日官方資料打包（統編、大股東、法人董監事）
+
+on:
+  schedule:
+    - cron: '23 21 * * *'   # 台北時間每天 05:23
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python crawler/build_pack.py
+      - name: 提交資料
+        run: |
+          git config user.name "pack-builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/pack
+          git diff --cached --quiet || git commit -m "更新官方資料包 $(date -u +%F)"
+          for i in 1 2 3; do git pull --rebase -X theirs && git push && break; sleep 5; done
