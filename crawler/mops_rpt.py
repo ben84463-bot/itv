@@ -315,7 +315,7 @@ def load_json(p, d):
 def universe():
     """上市（證交所 OpenAPI）＋上櫃（櫃買中心 OpenAPI）公司代號。"""
     out = {}
-    for url, mkt in (('https://openapi.twse.com.tw/v1/opendata/t187ap03_L', '上市'), ('https://www.tpex.org.tw/openapi/v1/mopsfe_t187ap03_O', '上櫃')):
+    for url, mkt in (('https://openapi.twse.com.tw/v1/opendata/t187ap03_L', '上市'), ('https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O', '上櫃'), ('https://www.tpex.org.tw/openapi/v1/mopsfe_t187ap03_O', '上櫃')):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': UA})
             rows = json.loads(urllib.request.urlopen(req, timeout=60).read().decode('utf-8'))
