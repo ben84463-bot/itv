@@ -1,0 +1,12 @@
+{
+ "built": "2026-11-25T18:39:13+08:00",
+ "source": "證交所、櫃買中心 OpenAPI（政府資料開放授權條款第1版）",
+ "counts": {
+  "companies_上市": 1098,
+  "companies_上櫃": 898,
+  "companies_興櫃": 378,
+  "insiders_rows": 52106,
+  "holders_rows": 2090,
+  "companies_with_legal_holders": 2175
+ }
+}
