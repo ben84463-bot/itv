@@ -22,10 +22,10 @@ INDEX = os.path.join(OUT, '_index.json')
 WATCH = os.path.join(ROOT, 'watchlist.txt')
 MOPS = 'https://mopsov.twse.com.tw/server-java/t164sb01'
 UA = 'Mozilla/5.0 (compatible; itv-rpt-crawler/1.0; +public research, 4s interval)'
-INTERVAL = float(os.environ.get('MOPS_INTERVAL', '4'))
+INTERVAL = float(os.environ.get('MOPS_INTERVAL', '8'))
 KEEP_Q = int(os.environ.get('KEEP_QUARTERS', '12'))
 FULL_DETAIL_Q = 4   # 最近 4 季保留完整表格；更早的季別只留關係人名單，控制資料量
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 
 _last = [0.0]
 
@@ -67,8 +67,9 @@ def get_mops(code, year, q, report_id):
             time.sleep(backoff)
             backoff = min(backoff * 2, 900)
         except Exception as e:
-            print(f'  連線錯誤 {e}', flush=True)
-            time.sleep(10)
+            print(f'  連線錯誤 {e}，暫停 {backoff} 秒', flush=True)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 900)
     raise Blocked('連續被擋')
 
 
@@ -94,7 +95,7 @@ CAT_ONLY = re.compile(r'^(' + CAT + r')(之關係企業|之子公司)?$')
 CAT_SPLIT = re.compile(r'^(?P<rel>.{0,30}?(?:' + CAT + r')[^－\-–/／]{0,12})\s*[－\-–/／]\s*(?P<name>.+)$')
 PERIOD_ROW = re.compile(r'^(本期|去年|上期|當期|期末|期初|\d{2,3}[年.]|至|合計|小計|總計|單位|金額|\(?\d)')
 NUMERIC = re.compile(r'^[\s$（）()\-－,.\d%]*$')
-ACCT = re.compile(r'(流動|非流動|建物|土地|權利金|包工包料|費用|成本|收入|負債|資產|款項|帳款|票據|保證金|合計|小計|總計|利息|租金|股利|收益|損失|淨額|設備|價款|金額|進貨|銷貨|期末|期初|年度|本期|福利|薪酬|借款|放款|存款|權益|事項|說明)$|^(應收|應付|預付|預收|合計|營業|其他應|租賃|財務|帳列)')
+ACCT = re.compile(r'(備註|融資款|附註|註記|資金貸與|背書保證|流動|非流動|建物|土地|權利金|包工包料|費用|成本|收入|負債|資產|款項|帳款|票據|保證金|合計|小計|總計|利息|租金|股利|收益|損失|淨額|設備|價款|金額|進貨|銷貨|期末|期初|年度|本期|福利|薪酬|借款|放款|存款|權益|事項|說明)$|^(應收|應付|預付|預收|合計|營業|其他應|租賃|財務|帳列)')
 SELF = re.compile(r'^(本公司|合併公司|母公司|子公司|孫公司|該公司|各公司|關係人|被投資公司|本集團|集團|兄弟公司|姊妹公司|關係企業|其他公司)$')
 ENTITY = re.compile(r'(股份有限公司|有限公司|\(股\)公司|（股）公司|公司|基金會|協會|學校|醫院|銀行|Co\.|Corp|Inc|Ltd|Limited|LLC|GmbH|B\.V\.|S\.A\.|Pte|Holding|Group|L\.P\.|Trust)', re.I)
 ALIAS = re.compile(r'[（(]\s*(?:以下)?簡稱\s*[「『]?([^）)」』]{1,20})[」』]?\s*[）)]')
@@ -164,6 +165,10 @@ def split_name(v, rel=''):
     if m:
         rel, v = m.group('rel').strip(), m.group('name').strip()
     v = CJK_SP.sub('', v) if re.fullmatch(r'[\u4e00-\u9fff\s]+', v) else v
+    while v and v[-1] in ')）' and v.count('(') + v.count('（') < v.count(')') + v.count('）'):
+        v = v[:-1].strip()
+    if re.search(r'支付|總價|動支|借款|擔保|全體|變更後|房屋|建築|^董事長$|總經理|之子公司$|^限公司|^Co\.?$', v) or ('、' in v and len(v) > 12):
+        return None
     if CAT_ONLY.match(v) or SELF.match(v) or len(v) < 2 or ACCT.search(v) or BAD_START.search(v) or BAD_END.search(v) or re.search(r'關係人|管理階層|關聯企業|合資|名稱|姓名|^金額$', v):
         return None
     alias = ''
@@ -190,8 +195,28 @@ def names_from_blob(txt):
     return out
 
 
-def parties_from(blocks):
+def row_stream(soup):
+    """依文件順序展開所有表格列（巢狀表格：外層含子表格的列略過，改讀子表格的列），並保留表格前的短標題文字。"""
+    out = []
+    for t in soup.find_all('table'):
+        if t.find_parent('table') is not None:
+            continue
+        cap = caption_of(t)
+        if cap:
+            out.append(['__CAP__', cap])
+        for tr in t.find_all('tr'):
+            if tr.find('table'):
+                continue
+            cells = [clean(c.get_text(' ')) for c in tr.find_all(['td', 'th'], recursive=False)] or [clean(c.get_text(' ')) for c in tr.find_all(['td', 'th'])]
+            if any(cells):
+                out.append(cells)
+        out.append(['__END__'])
+    return out
+
+
+def parties_from_stream(rows):
     out, seen = [], {}
+    rp_tables, cur_tbl = [], None
 
     def add(r, src):
         if not r:
@@ -205,28 +230,57 @@ def parties_from(blocks):
         seen[k] = r
         out.append(r)
 
-    for b in blocks:
-        rows = b['rows']
-        hi = next((i for i, r in enumerate(rows[:5]) if any(NAME_COL.search(c) for c in r)), None)
-        if hi is not None:
-            hdr = rows[hi]
-            ni = next(i for i, c in enumerate(hdr) if NAME_COL.search(c))
-            ri = next((i for i, c in enumerate(hdr) if REL_COL.search(c) and i != ni), None)
-            for r in rows[hi + 1:]:
-                if not r or PERIOD_ROW.match(r[0]) and all(PERIOD_ROW.match(c) or NUMERIC.match(c) for c in r):
-                    continue
-                if len(r) == 1 and len(r[0]) < 150:
-                    continue
+    title, ni, ri, rp_ctx, since_title = '', None, None, False, 0
+    for r in rows:
+        if r[0] == '__END__':
+            ni, ri = None, None
+            continue
+        if r[0] == '__CAP__':
+            if re.search(r'關係人|關係企業', r[1]):
+                title, rp_ctx, since_title = r[1], True, 0
+            continue
+        since_title += 1
+        if len(r) == 1 and len(r[0]) <= 60:
+            t = r[0]
+            if re.search(r'關係人|關係企業', t) and not re.search(r'^(資金貸與|為他人背書|母子公司間)', t):
+                title, rp_ctx, since_title, ni, ri = t, True, 0, None, None
+                cur_tbl = {'title': t, 'rows': [r]}
+                rp_tables.append(cur_tbl)
+            elif re.match(r'^(\(?[一二三四五六七八九十0-9]+[)、.．]|附表|質押|重大|部門|其他重要)', t) or since_title > 60:
+                rp_ctx, cur_tbl = False, None
+            continue
+        if cur_tbl is not None and rp_ctx:
+            cur_tbl['rows'].append(r)
+        if any(len(c) <= 40 and NAME_COL.search(c) for c in r) and (rp_ctx or any(len(c) <= 40 and '關係人' in c for c in r)):
+            ni = next(i for i, c in enumerate(r) if len(c) <= 40 and NAME_COL.search(c))
+            ri = next((i for i, c in enumerate(r) if len(c) <= 40 and REL_COL.search(c) and i != ni), None)
+            rp_ctx = True
+            if cur_tbl is None:
+                cur_tbl = {'title': title or '關係人表格', 'rows': [r]}
+                rp_tables.append(cur_tbl)
+            continue
+        if ni is not None and rp_ctx:
+            if not (PERIOD_ROW.match(r[0]) and all(PERIOD_ROW.match(c) or NUMERIC.match(c) for c in r)):
                 v = r[ni] if ni < len(r) else ''
-                add(split_name(v, r[ri] if ri is not None and ri < len(r) else ''), b['title'] or '關係人表格')
-        for r in rows:
-            for c in r:
-                if len(c) > 150 and re.search(r'關係人', c):
-                    for x in names_from_blob(c):
-                        add(x, '附註文字（依 $ 金額前的名稱推測）')
-                elif len(c) <= 80 and CAT_SPLIT.match(c):
-                    add(split_name(c), b['title'] or '關係人表格')
-    return out
+                add(split_name(v, r[ri] if ri is not None and ri < len(r) else ''), title or '關係人表格')
+        for c in r:
+            if len(c) > 150 and re.search(r'關係人', c):
+                for x in names_from_blob(c):
+                    add(x, '附註文字（依 $ 金額前的名稱推測）')
+            elif rp_ctx and len(c) <= 80 and CAT_SPLIT.match(c):
+                add(split_name(c), title or '關係人表格')
+    return out, rp_tables
+
+
+def parties_from(blocks):
+    """相容：把 blocks 轉成列串流後解析。"""
+    rows = []
+    for b in blocks:
+        if b.get('title') and not (len(b['rows'][0]) == 1 and b['rows'][0][0] == b['title']):
+            rows.append(['__CAP__', b['title']])
+        rows.extend(b['rows'])
+        rows.append(['__END__'])
+    return parties_from_stream(rows)[0]
 
 
 def sched_from(blocks):
@@ -257,24 +311,31 @@ def sched_from(blocks):
 def parse_report(html):
     soup = BeautifulSoup(html, 'html.parser')
     blocks = blocks_of(soup)
-    rp = [b for b in blocks if is_rp(b)]
+    parties, rp_tables = parties_from_stream(row_stream(soup))
+    rp = [b for b in blocks if is_rp(b)]          # 另以最內層表格判斷，兩種結果合併
+    names = {p['name'] for p in parties}
+    for x in parties_from(rp):
+        if x['name'] not in names:
+            parties.append(x)
+            names.add(x['name'])
+    if rp and not rp_tables:
+        rp_tables = rp
     notes = []
-    if not rp:
+    if not rp_tables and not parties:
         notes.append('找不到「關係人交易」相關表格')
+    elif not parties:
+        notes.append('有關係人交易表格，但未辨識出具名關係人（可能全為類別揭露）')
     m = re.search(r'單位[:：]\s*(新臺幣|新台幣)?\s*(仟元|千元|元|百萬元)', soup.get_text(' ')[:200000])
     unit = ((m.group(1) or '新臺幣') + m.group(2)) if m else ''
-    parties = parties_from(rp)
-    if rp and not parties:
-        notes.append('有關係人交易表格，但未辨識出具名關係人（可能全為類別揭露）')
     schedules, sched_names = sched_from(blocks)
     texts = []
-    for b in rp:
+    for b in rp_tables:
         for r in b['rows']:
             for c in r:
                 if len(c) > 150 and c not in texts:
                     texts.append(c[:6000])
-    rp_tables = [b for b in rp if not all(len(r) == 1 and len(r[0]) > 150 for r in b['rows'])]
-    return {'how': 'tables-v2', 'unit': unit, 'parties': parties, 'tables': rp_tables[:80], 'texts': texts[:30],
+    tables = [b for b in rp_tables if not all(len(r) == 1 and len(r[0]) > 150 for r in b['rows'])]
+    return {'how': 'tables-v3', 'unit': unit, 'parties': parties, 'tables': tables[:80], 'texts': texts[:30],
             'schedules': schedules, 'schedNames': sched_names, 'notes': notes}
 
 
@@ -313,8 +374,18 @@ def crawl_one(code, keep=KEEP_Q, known=None):
         if k in missing and k not in recent2:
             continue
         got = None
+        try:
+            fetched = [get_mops(code, y, q, rid) for rid in ('C',)]
+        except Blocked:
+            print(f'  {code} {k}：觀測站阻擋，先存已抓到的季別', flush=True)
+            _save(code, path, old, quarters, missing, known)
+            raise
         for rid in ('C', 'A'):
-            url, html = get_mops(code, y, q, rid)
+            try:
+                url, html = fetched[0] if rid == 'C' else get_mops(code, y, q, rid)
+            except Blocked:
+                _save(code, path, old, quarters, missing, known)
+                raise
             if is_missing(html):
                 continue
             rep = parse_report(html)
@@ -329,6 +400,11 @@ def crawl_one(code, keep=KEEP_Q, known=None):
             if k not in recent2:
                 missing.add(k)
             print(f'  {code} {k}：觀測站無此季財報', flush=True)
+    return _save(code, path, old, quarters, missing, known)
+
+
+def _save(code, path, old, quarters, missing, known):
+    quarters = list(quarters)
     for x in old.get('quarters', []):
         if not any(q['year'] == x['year'] and q['quarter'] == x['quarter'] for q in quarters) and x.get('parser') == PARSER_VERSION:
             quarters.append(x)
@@ -416,7 +492,7 @@ def main():
             prev = state.get(code, {})
             state[code] = {'t': time.time(), 'latest': f"{lq['year']}Q{lq['quarter']}" if lq else '', 'n': len(d['quarters']), 'full': full or prev.get('full', False) and prev.get('latest') == (f"{lq['year']}Q{lq['quarter']}" if lq else '')}
         except Blocked:
-            print('觀測站持續阻擋，結束本批', flush=True)
+            print('::warning::觀測站持續阻擋，已存下抓到的部分，結束本批（下一批會接著抓）', flush=True)
             break
         done += 1
         if done % 10 == 0:
