@@ -2,7 +2,7 @@ name: 抓取關係人交易（公開資訊觀測站）
 
 on:
   schedule:
-    - cron: '17 */3 * * *'        # 每 3 小時一批（UTC），每批最多 50 分鐘
+    - cron: '17 * * * *'          # 每小時一批，每批最多 50 分鐘（同時只跑一批）
   workflow_dispatch:
     inputs:
       tickers:
@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install beautifulsoup4==4.12.3
