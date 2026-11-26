@@ -9,6 +9,10 @@ on:
         description: '股票代號（逗號分隔，留空則跑排程模式）'
         required: false
         default: ''
+      debug:
+        description: '除錯：存下最新一季原始頁面片段（填 1 開啟）'
+        required: false
+        default: ''
   issues:
     types: [opened]
 
@@ -42,6 +46,8 @@ jobs:
           if [ -z "$T" ] && [ -n "$INPUT_TICKERS" ]; then T=$(echo "$INPUT_TICKERS" | grep -oE '[0-9]{4,6}' | head -30 | paste -sd, -); fi
           echo "tickers=$T" >> "$GITHUB_OUTPUT"
       - name: 抓取
+        env:
+          DEBUG_HTML: ${{ github.event.inputs.debug }}
         run: |
           if [ -n "${{ steps.pick.outputs.tickers }}" ]; then
             python crawler/mops_rpt.py --tickers "${{ steps.pick.outputs.tickers }}" --budget 40
@@ -53,6 +59,7 @@ jobs:
           git config user.name "rpt-crawler"
           git config user.email "actions@users.noreply.github.com"
           git add data/rpt
+          if [ -d data/debug ]; then git add data/debug; fi
           git diff --cached --quiet || git commit -m "更新關係人交易資料 $(date -u +%F' '%H:%M)"
           ok=0; for i in 1 2 3; do git pull --rebase -X theirs && git push && ok=1 && break; sleep 5; done
           if [ "$ok" != 1 ]; then echo "::error::資料推送到 GitHub 失敗"; exit 1; fi
