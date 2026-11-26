@@ -54,7 +54,8 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add data/rpt
           git diff --cached --quiet || git commit -m "更新關係人交易資料 $(date -u +%F' '%H:%M)"
-          for i in 1 2 3; do git pull --rebase -X theirs && git push && break; sleep 5; done
+          ok=0; for i in 1 2 3; do git pull --rebase -X theirs && git push && ok=1 && break; sleep 5; done
+          if [ "$ok" != 1 ]; then echo "::error::資料推送到 GitHub 失敗"; exit 1; fi
       - name: 回覆 Issue
         if: github.event_name == 'issues'
         env:
