@@ -25,7 +25,7 @@ UA = 'Mozilla/5.0 (compatible; itv-rpt-crawler/1.0; +public research, 4s interva
 INTERVAL = float(os.environ.get('MOPS_INTERVAL', '8'))
 KEEP_Q = int(os.environ.get('KEEP_QUARTERS', '12'))
 FULL_DETAIL_Q = 4   # 最近 4 季保留完整表格；更早的季別只留關係人名單，控制資料量
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 DEBUG_HTML = os.environ.get('DEBUG_HTML', '') in ('1', 'true', 'True')
 DEBUG_DIR = os.path.join(ROOT, 'data', 'debug')
 
@@ -97,7 +97,7 @@ CAT_ONLY = re.compile(r'^(' + CAT + r')(之關係企業|之子公司)?$')
 CAT_SPLIT = re.compile(r'^(?P<rel>.{0,30}?(?:' + CAT + r')[^－\-–/／]{0,12})\s*[－\-–/／]\s*(?P<name>.+)$')
 PERIOD_ROW = re.compile(r'^(本期|去年|上期|當期|期末|期初|\d{2,3}[年.]|至|合計|小計|總計|單位|金額|\(?\d)')
 NUMERIC = re.compile(r'^[\s$（）()\-－,.\d%]*$')
-ACCT = re.compile(r'(備註|融資款|附註|註記|資金貸與|背書保證|流動|非流動|建物|土地|權利金|包工包料|費用|成本|收入|負債|資產|款項|帳款|票據|保證金|合計|小計|總計|利息|租金|股利|收益|損失|淨額|設備|價款|金額|進貨|銷貨|期末|期初|年度|本期|福利|薪酬|借款|放款|存款|權益|事項|說明)$|^(應收|應付|預付|預收|合計|營業|其他應|租賃|財務|帳列)')
+ACCT = re.compile(r'(工程|擴建|修繕|維修|材料款等|款等|備註|融資款|附註|註記|資金貸與|背書保證|流動|非流動|建物|土地|權利金|包工包料|費用|成本|收入|負債|資產|款項|帳款|票據|保證金|合計|小計|總計|利息|租金|股利|收益|損失|淨額|設備|價款|金額|進貨|銷貨|期末|期初|年度|本期|福利|薪酬|借款|放款|存款|權益|事項|說明)$|^(應收|應付|預付|預收|合計|營業|其他應|租賃|財務|帳列)')
 SELF = re.compile(r'^(本公司|合併公司|母公司|子公司|孫公司|該公司|各公司|關係人|被投資公司|本集團|集團|兄弟公司|姊妹公司|關係企業|其他公司)$')
 ENTITY = re.compile(r'(股份有限公司|有限公司|\(股\)公司|（股）公司|公司|基金會|協會|學校|醫院|銀行|Co\.|Corp|Inc|Ltd|Limited|LLC|GmbH|B\.V\.|S\.A\.|Pte|Holding|Group|L\.P\.|Trust)', re.I)
 ALIAS = re.compile(r'[（(]\s*(?:以下)?簡稱\s*[「『]?([^）)」』]{1,20})[」』]?\s*[）)]')
@@ -169,7 +169,7 @@ def split_name(v, rel=''):
     v = CJK_SP.sub('', v) if re.fullmatch(r'[\u4e00-\u9fff\s]+', v) else v
     while v and v[-1] in ')）' and v.count('(') + v.count('（') < v.count(')') + v.count('）'):
         v = v[:-1].strip()
-    if re.search(r'支付|總價|動支|借款|擔保|全體|變更後|房屋|建築|^董事長$|總經理|之子公司$|^限公司|^Co\.?$', v) or ('、' in v and len(v) > 12):
+    if re.search(r'支付|總價|動支|借款|擔保|全體|變更後|房屋|建築|^董事長$|總經理|之子公司$|^限公司|^Co\.?$|^(Ltd|Inc|Corp|LLC|Limited|Co\., ?Ltd)\.?$|^其他$', v, re.I) or ('、' in v and len(v) > 12):
         return None
     if CAT_ONLY.match(v) or SELF.match(v) or len(v) < 2 or ACCT.search(v) or BAD_START.search(v) or BAD_END.search(v) or re.search(r'關係人|管理階層|關聯企業|合資|名稱|姓名|^金額$', v):
         return None
@@ -314,6 +314,38 @@ NIL = re.compile(r'無此情形|免揭露|不適用')
 NAME_IX = re.compile(r'RelatedParty.*Name|NameOfRelatedParty|NameOfParentEntity', re.I)
 
 
+RP_ITEMS = ('關係人名稱及關係', '營業收入', '進貨', '應收關係人款項', '應付關係人款項', '預付款項', '取得不動產、廠房及設備',
+            '處分不動產、廠房及設備', '取得投資性不動產', '處分投資性不動產', '取得金融資產', '處分金融資產', '取得其他資產',
+            '處分其他資產', '對關係人放款', '背書保證', '其它', '向關係人借款', '主要管理階層薪酬')
+
+
+def split_items(title, rows):
+    """新版財報偶有表格未正確結束，後面的項目被併進同一張表：遇到已知項目名稱或薪酬表頭就切開。"""
+    out, cur = [], {'title': title, 'rows': []}
+    for i, r in enumerate(rows):
+        nxt = rows[i + 1] if i + 1 < len(rows) else []
+        new = None
+        if r and r[0] in RP_ITEMS and (cur['rows'] or r[0] != title):
+            new = r[0]
+        elif r and r[0] == '' and nxt[:1] == ['短期員工福利']:
+            new = '主要管理階層薪酬'
+        if cur['title'] == '主要管理階層薪酬' and cur['rows'] and cur['rows'][-1][:1] == ['說明']:
+            break                     # 薪酬表是段落最後一項；之後的列屬於其他附註，丟棄
+        if new and cur['rows']:
+            out.append(cur)
+            cur = {'title': new, 'rows': []}
+        elif new:
+            cur['title'] = new
+        cur['rows'].append(r)
+    if cur['rows']:
+        out.append(cur)
+    return out
+
+
+def norm_co(n):
+    return re.sub(r'[（(]股[)）]\s*公司', '股份有限公司', n)
+
+
 def section_rp(soup):
     """v4：新版 iXBRL 財報以 <div id="TransactionsBetweenRelatedParties"> 為錨點，
     其下是 div.title（大標）、置中 div（項目名稱）＋「無此情形／免揭露」或表格。"""
@@ -360,8 +392,19 @@ def section_rp(soup):
         ttl = label or big or '關係人交易'
         if len(rows[0]) == 1 and len(rows[0][0]) <= 60:
             ttl = rows[0][0]
-        sec['items'].append({'title': ttl, 'rows': rows})
+        parts = split_items(ttl, rows)
+        for it in parts:
+            if len(it['rows']) <= 1:
+                continue
+            if any(r[:1] == ['短期員工福利'] for r in it['rows']):
+                sec['kmp'] = [r for r in it['rows'] if r != ['主要管理階層薪酬']] if it['title'] == '主要管理階層薪酬' else it['rows']
+            elif it['title'] == '背書保證' and all(len(c) > 60 or c == '背書保證' for r in it['rows'] for c in r):
+                continue   # 只有法定說明文字（七種關係），非實際交易
+            else:
+                sec['items'].append(it)
         label = ''
+        if sec['kmp']:
+            break
     return sec
 
 
@@ -385,15 +428,24 @@ def parse_report(html):
             srows.extend(it['rows'])
             srows.append(['__END__'])
         sp, _ = parties_from_stream(srows)
+        if sec['items']:          # 有段落表格時以段落為準，避免附註文字推測造成雜訊
+            parties, names, rp_tables = [], set(), []
         for nm in sec['ixNames']:
             x = split_name(nm)
             if x:
                 x['src'] = '財報 iXBRL 關係人名稱欄位'
                 sp.append(x)
+        byk = {norm_co(p['name']): p for p in parties}
         for x in sp:
-            if x['name'] not in names:
-                parties.append(x)
-                names.add(x['name'])
+            k = norm_co(x['name'])
+            if k in byk:
+                if x['relation'] and not byk[k]['relation']:
+                    byk[k]['relation'] = x['relation']
+                continue
+            x['name'] = k
+            byk[k] = x
+            parties.append(x)
+            names.add(k)
         core = lambda rows: [r for r in rows if len(r) > 1]
         for it in sec['items']:
             if not any(core(it['rows']) == core(b['rows']) for b in rp_tables):
@@ -493,7 +545,9 @@ def dump_debug(code, k, rid, html):
             'first_hits': idxs[:40], 'tables': html.count('<table'), 'divs': html.count('<div'), 'pre': html.count('<pre')}
     start = max(0, (idxs[0] if idxs else 0) - 20000)
     # 取第一個「關係人交易」標題附近，若無則取第一個「關係人」附近
-    t = html.find('關係人交易')
+    t = html.find('id="TransactionsBetweenRelatedParties"')
+    if t < 0:
+        t = html.find('關係人交易')
     if t >= 0:
         start = max(0, t - 20000)
     snippet = html[start:start + 400000]
