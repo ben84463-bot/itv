@@ -75,6 +75,19 @@ details{margin:8px 0}summary{cursor:pointer;min-height:32px}
 .gwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;margin-top:10px}
 .gbox{position:relative;border:1px solid var(--line);border-radius:6px;background:#fff;height:600px;overflow:hidden}
 .gbox svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.gap{border:1px solid #e0b100;background:#fff8d6;border-left:5px solid #e0b100;border-radius:6px;padding:10px 14px;margin:0 0 12px;font-size:14px;line-height:1.6}
+.gap.hi{border-color:#c62828;border-left-color:#c62828;background:#fdecea}
+.gap ul{margin:4px 0 0;padding-left:20px}
+.gbox.fs{position:fixed;inset:0;z-index:900;height:auto;border-radius:0;border:0}
+.gzoom{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.gzoom button{width:40px;height:40px;padding:0;font-size:18px;border-radius:8px;background:#fff;color:#141414;font-weight:600;border:1px solid #bdbdb6;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:pointer}
+.gzoom button.txt{font-size:12px;height:auto;padding:6px 0;line-height:1.2}
+.gbusy{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.88);flex-direction:column;gap:12px;font-size:15px;color:#333;text-align:center;padding:20px}
+.gbusy.on{display:flex}
+.spin{width:34px;height:34px;border:4px solid #ddd;border-top-color:#c62828;border-radius:50%;animation:sp 0.9s linear infinite}
+.spin.sm{display:inline-block;width:14px;height:14px;border-width:2px;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+body.gfs{overflow:hidden}
 .tip{position:absolute;pointer-events:none;background:#141414;color:#fff;font-size:13px;line-height:1.5;padding:8px 10px;border-radius:4px;max-width:300px;display:none;z-index:2}
 .tip b{color:#ffe600}
 .gtool{position:absolute;left:8px;top:8px;display:none;align-items:center;gap:6px;flex-wrap:wrap;background:#fff;border:1px solid #d8d8d4;border-radius:6px;padding:6px 8px;font-size:13px;color:#141414;z-index:3;box-shadow:0 2px 8px rgba(0,0,0,.12)}
@@ -189,7 +202,7 @@ main section.step+section.step{border-top:1px solid var(--line)}
   </nav>
 
   <section class="step" id="sOv" data-tab="ov">
-    <div id="ovBox"></div>
+    <div id="gapOv"></div><div id="ovBox"></div>
   </section>
 
   <section class="step" id="s1" data-tab="ov">
@@ -240,17 +253,19 @@ main section.step+section.step{border-top:1px solid var(--line)}
       <label class="chk">拖曳方式<select id="gDrag" style="min-height:36px"><option value="group" selected>同群組一起移動</option><option value="nbr">連同相連節點</option><option value="one">只移動單一節點</option></select></label>
       <label class="chk">節點大小<input type="range" id="gScale" min="0.5" max="2.5" step="0.05" value="1" style="width:110px"></label>
       <label class="chk">文字大小<input type="range" id="gFont" min="0.7" max="2" step="0.05" value="1" style="width:110px"></label>
+      <span class="gsel"><button class="ghost sm" id="gSelAll">全部選取</button><button class="ghost sm" id="gDelSel" disabled>刪除選取</button><button class="ghost sm" id="gDelAll">全部刪除</button><button class="ghost sm" id="gRestore" style="display:none">還原已刪除</button><span class="sub" id="gSelInfo"></span></span>
       <button class="ghost sm" id="gRelayout">重新排列</button>
       <button class="ghost sm" id="gResetSize">大小與框框全部重設</button>
       <button class="ghost sm" id="gPng">下載 PNG</button>
       <button class="ghost sm" id="gSvg">下載 SVG</button>
       <button class="ghost sm" id="gPrint">列印／存 PDF</button>
     </div>
+    <div id="gapRel"></div>
     <div class="gwrap">
       <div>
-        <div class="gbox" id="gbox"><svg id="gsvg"></svg><div class="tip" id="gtip"></div>
-          <div class="gtool" id="gTool"><span>已選：<b id="gToolName"></b> <span id="gToolPct"></span></span><button class="sm" id="gToolMinus" aria-label="縮小節點">－</button><button class="sm" id="gToolPlus" aria-label="放大節點">＋</button><button class="ghost sm" id="gToolReset">原尺寸</button></div></div>
-        <div class="sub" style="margin-top:4px">調整方式：<b>拖曳節點</b>依「拖曳方式」決定同群組或相連節點一起移動；<b>點選節點</b>後拖曳右下角藍色小圓可直接拉大縮小，或用 ＋／－、Shift＋滾輪；<b>點黃框邊線</b>選取整個群組，用 ＋／－ 一起放大縮小；拖曳黃框四角可調整框的大小，拖曳框內空白處整群移動，雙擊黃框恢復自動大小。</div>
+        <div class="gbox" id="gbox"><svg id="gsvg"></svg><div class="tip" id="gtip"></div><div class="gzoom"><button id="gzIn" title="放大" aria-label="放大">＋</button><button id="gzOut" title="縮小" aria-label="縮小">－</button><button class="txt" id="gzFit" title="整張圖放進畫面">符合<br>畫面</button><button class="txt" id="gzFs" title="全螢幕檢視（Esc 離開）">全螢幕</button></div><div class="gbusy" id="gBusy"><div class="spin"></div><div id="gBusyTxt">查詢中…</div><div class="sub">資料跑完後才會畫出關係圖，期間畫面不會跳動。</div></div>
+          <div class="gtool" id="gTool"><span>已選：<b id="gToolName"></b> <span id="gToolPct"></span></span><button class="sm" id="gToolMinus" aria-label="縮小節點">－</button><button class="sm" id="gToolPlus" aria-label="放大節點">＋</button><button class="ghost sm" id="gToolReset">原尺寸</button><button class="sm" id="gToolDel" style="background:#c62828;border-color:#c62828;color:#fff">刪除節點</button></div></div>
+        <div class="sub" style="margin-top:4px">調整方式：<b>拖曳節點</b>依「拖曳方式」決定同群組或相連節點一起移動；<b>點選節點</b>後拖曳右下角藍色小圓可直接拉大縮小，或用 ＋／－、Shift＋滾輪；<b>點黃框邊線</b>選取整個群組，用 ＋／－ 一起放大縮小；拖曳黃框四角可調整框的大小，拖曳框內空白處整群移動，雙擊黃框恢復自動大小。<b>刪除</b>：點選節點後按「刪除節點」或鍵盤 Delete；Ctrl／Shift＋點選可多選；「全部選取」「全部刪除」在上方工具列。刪除只是不畫在圖上，交易對手資料不受影響，可按「還原已刪除」找回。</div>
         <div class="legend">
           <span><i style="background:#141414"></i>標的公司</span><span><i style="background:#c62828"></i>高度留意</span><span><i style="background:#f2c200"></i>待確認</span>
           <span><i style="background:#9a9a94"></i>未見重疊</span><span><i style="background:#fff;border:2px dashed #9a9a94"></i>商工查無</span>
@@ -314,7 +329,7 @@ main section.step+section.step{border-top:1px solid var(--line)}
 
 <script>
 {
-const VERSION='v0.9.5', BUILT='2026-11-26';
+const VERSION='v0.9.7', BUILT='2026-11-26';
 document.getElementById('ver').textContent=VERSION+'・'+BUILT;
 const COLS=[
  {k:'fact',t:'已確認事實',h:'有出處可查、可重現的內容'},
@@ -589,7 +604,9 @@ async function pickStock(id){const s=(STOCKS||[]).find(x=>x[0]===id);$('stkList'
  if(proxyUrl()&&!(RPT[id]&&RPT[id].quarters&&RPT[id].quarters.length))await autoReport();
  setStatus('');const mopsJob=loadMopsAll();
  const d=RPT[id];if(d&&d.quarters&&d.quarters.length&&!c.cps.length){const n=importRpt(0,false);if(n){setStatus(`已從 ${d.quarters[0].roc} 財報帶入 ${n} 筆關係人，開始自動核對…`);await runAuto()}}}
-function setStatus(t){$('autoStatus').textContent=t}
+let AUTO=false;
+function setStatus(t){const el=$('autoStatus');if(AUTO&&t&&!t.startsWith('完成')){el.innerHTML='<span class="spin sm"></span>'+esc(t)}else el.textContent=t;if(AUTO&&t)$('gBusyTxt').textContent=t}
+function busy(on){$('gBusy').classList.toggle('on',!!on);if(!on)setTimeout(renderGaps,0);if(!on&&GPEND){GPEND=false;renderGraph()}}
 async function loadTarget(quiet){const c=cur();if(!/^\d{8}$/.test(c.ban)){if(!quiet)msg('統一編號需為 8 碼數字。','warn');return}
  setStatus('正在載入商工登記…');
  try{const r=await companyGet('/show/'+c.ban);c.target=summary(r&&r.data);c.targetAt=now();
@@ -710,6 +727,7 @@ function importRpt(qi,withSched){const c=cur();const d=RPT[c.ticker];if(!d||!d.q
 function tableHtml(tb){return`<div class="scroll"><table class="fin rawt">${tb.title?`<caption>${esc(tb.title)}</caption>`:''}${tb.rows.map((r,i)=>`<tr>${r.map(x=>i===0?`<th>${esc(x)}</th>`:`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</table></div>`}
 function renderRpt(){scheduleOv();const box=$('rptBox');const c=cur();if(!box)return;
  if(!c.ticker){box.innerHTML='<p class="sub">選擇股票後，會自動讀取財報附註中的關係人交易。</p>';return}
+ if(!$('gapRpt'))box.insertAdjacentHTML('beforebegin','<div id="gapRpt"></div>');
  if(c.rptLocal&&c.rptLocal.length&&(!RPT[c.ticker]||RPT[c.ticker].err))RPT[c.ticker]={quarters:[]};mergeRpt();
  const d=RPT[c.ticker];
  if(!d){box.innerHTML='<p class="sub">讀取中…</p>';return}
@@ -1006,14 +1024,14 @@ async function expandCp(i){const c=cur();const p=c.cps[i];if(!p||!p.reg||!p.ban)
 function tgt(){const c=cur();const t=c.target;if(!t)return t;const extra=((c.hold&&c.hold.holders)||[]).filter(h=>h.holder_ban).map(h=>({title:'官方申報'+(h.seat||'大股東'),name:'',legal:{id:h.holder_ban,name:h.holder}}));return extra.length?{...t,dirs:t.dirs.concat(extra)}:t}
 function scoreGroups(){const c=cur();Object.values(c.grp||{}).forEach(g=>{g.flags=c.target?compare(tgt(),c.ban,g.reg,g.ban).filter(f=>f.lv!=='bad'&&!/設立未滿|僅查到財政部/.test(f.text)):[];
  g.score=g.flags.reduce((s,f)=>s+(f.col==='fact'?3:2),0)})}
-async function checkAll(onlyNew){const c=cur();for(let i=0;i<c.cps.length;i++){if(onlyNew&&(c.cps[i].reg||c.cps[i].err))continue;await checkCp(i);await sleep(900)}}
-async function expandAll(){const c=cur();for(let i=0;i<c.cps.length;i++){if(c.cps[i].reg&&!c.cps[i].expanded)await expandCp(i)}$('cpStatus').textContent='';renderCps()}
-let AUTO=false;
-async function runAuto(){if(AUTO)return;AUTO=true;try{setStatus('核對交易對手的商工登記…');await checkAll(true);setStatus('以董監事、地址擴展集團企業…');await expandAll();setStatus('');
+async function checkAll(onlyNew){const c=cur();for(let i=0;i<c.cps.length;i++){if(onlyNew&&(c.cps[i].reg||c.cps[i].err))continue;if(AUTO)setStatus(`核對交易對手的商工登記… ${i+1}／${c.cps.length}`);await checkCp(i);await sleep(900)}}
+async function expandAll(){const c=cur();for(let i=0;i<c.cps.length;i++){if(c.cps[i].reg&&!c.cps[i].expanded){if(AUTO)setStatus(`以董監事、地址擴展集團企業… ${i+1}／${c.cps.length}（${c.cps[i].name}）`);await expandCp(i)}}$('cpStatus').textContent='';renderCps()}
+
+async function runAuto(){if(AUTO)return;AUTO=true;busy(true);try{setStatus('核對交易對手的商工登記…');await checkAll(true);setStatus('以董監事、地址擴展集團企業…');await expandAll();setStatus('');
  const g=Object.values(cur().grp||{});const hot=g.filter(x=>x.score>0).length;
- setStatus(`完成：交易對手 ${cur().cps.length} 家，擴展出集團企業 ${g.length} 家，其中 ${hot} 家與標的公司有登記重疊。`);
- ensureSnap(false);renderSnap();scheduleOv()}finally{AUTO=false}}
-$('btnExpandAll').onclick=async e=>{e.target.disabled=true;cur().cps.forEach(p=>delete p.expanded);await expandAll();e.target.disabled=false};
+ setStatus(`完成：交易對手 ${cur().cps.length} 家，擴展出集團企業 ${g.length} 家，其中 ${hot} 家與標的公司有登記重疊。`+(dataGaps().length?'　⚠ 資料不完整，請看「總覽」上方警語。':''));
+ ensureSnap(false);renderSnap();scheduleOv()}finally{AUTO=false;GPEND=true;busy(false)}}
+$('btnExpandAll').onclick=async e=>{if(AUTO)return;e.target.disabled=true;AUTO=true;busy(true);setStatus('以董監事、地址擴展集團企業…');try{cur().cps.forEach(p=>delete p.expanded);await expandAll()}finally{AUTO=false;setStatus('');GPEND=true;busy(false);e.target.disabled=false}};
 
 /* ---------- v0.8 擴充：永豐 shioaji-data、官方法人持股、業務關係線索 ---------- */
 const SD_BASES=['https://cdn.jsdelivr.net/gh/Sinotrade/shioaji-data@main/v1/tw/','https://raw.githubusercontent.com/Sinotrade/shioaji-data/main/v1/tw/'];
@@ -1156,7 +1174,7 @@ function renderSnap(){const box=$('snapBox');if(!box)return;const c=cur();const 
 const GC={ink:'#141414',hi:'#c62828',mid:'#f2c200',lo:'#9a9a94',blue:'#1d2bd8',line:'#b9b9b3'};
 function scoreOf(p){let s=0;(p.flags||[]).forEach(f=>{s+=f.lv==='bad'?3:f.lv==='hit'?(f.col==='fact'?3:2):1});return s}
 const levelOf=s=>s>=3?'hi':s>=1?'mid':'lo';
-let SIM=null,GDATA=null,gTimer=null;
+let SIM=null,GDATA=null,gTimer=null,GPEND=false,GZ=null;
 function buildGraph(){const c=cur();const N=new Map(),L=[];
  const add=(id,o)=>{if(!N.has(id))N.set(id,{id,...o,cos:new Set()});else Object.assign(N.get(id),Object.fromEntries(Object.entries(o).filter(([k,v])=>v!=null&&v!=='')) );return N.get(id)};
  const link=(a,b,type,label)=>{if(a!==b)L.push({source:a,target:b,type,label:label||''})};
@@ -1204,8 +1222,8 @@ function buildGraph(){const c=cur();const N=new Map(),L=[];
 function nodeColor(n){if(n.kind==='target')return GC.ink;if(n.kind==='unknown')return'#fff';
  if(n.kind==='cp')return GC[levelOf(n.score)];if(n.kind==='grp')return n.score>=3?GC.hi:n.score>0?GC.mid:'#d9c3a0';if(n.kind==='biz')return'#eef3ff';if(n.kind==='legal')return n.warn==='hi'?GC.hi:'#5d5d58';
  return n.warn?GC.mid:'#c9c9c4'}
-function scheduleGraph(){clearTimeout(gTimer);gTimer=setTimeout(renderGraph,60)}
-function gp(){const c=cur();c.gp=c.gp||{};const g=c.gp;g.ns=g.ns||{};g.box=g.box||{};g.scale=g.scale||1;g.font=g.font||1;return g}
+function scheduleGraph(){if(AUTO){GPEND=true;return}clearTimeout(gTimer);gTimer=setTimeout(renderGraph,60)}
+function gp(){const c=cur();c.gp=c.gp||{};const g=c.gp;g.ns=g.ns||{};g.box=g.box||{};g.scale=g.scale||1;g.font=g.font||1;g.hide=g.hide||[];return g}
 function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML='<p class="sub">關係圖元件（d3）載入失敗，請確認網路可連到 cdnjs.cloudflare.com。</p>';return}
  const full=buildGraph();renderWatch(full);const svg=d3.select(svgEl);svg.selectAll('*').remove();if(SIM)SIM.stop();$('gTool').style.display='none';
  if(!full){svg.append('text').attr('x',20).attr('y',30).attr('fill','#5d5d58').text('載入標的公司並加入交易對手後，關係圖會出現在這裡。');return}
@@ -1214,17 +1232,22 @@ function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML
  let keep=new Set(full.nodes.filter(n=>(n.kind!=='person'||n.shared||n.rp||showAll)&&(n.kind!=='legal'||n.cos.length>=2||showAll)).map(n=>n.id));
  if(focus){const risky=new Set(full.nodes.filter(n=>((n.kind==='cp'||n.kind==='grp')&&n.score>0)||n.kind==='unknown'||n.warn||n.rp||n.hold).map(n=>n.id));risky.add(full.tid);
   full.nodes.forEach(n=>{if((n.kind==='person'||n.kind==='legal')&&n.warn)n.cos.forEach(x=>risky.add(x))});keep=new Set([...keep].filter(x=>risky.has(x)))}
+ const HID=new Set(P.hide);HID.delete(full.tid);keep=new Set([...keep].filter(x=>!HID.has(x)));
+ {const deg=new Map();full.links.forEach(l=>{if(keep.has(l.source)&&keep.has(l.target)){deg.set(l.source,(deg.get(l.source)||0)+1);deg.set(l.target,(deg.get(l.target)||0)+1)}});
+  if(HID.size)keep=new Set([...keep].filter(x=>x===full.tid||deg.get(x)))}
+ $('gRestore').style.display=HID.size?'':'none';$('gRestore').textContent=`還原已刪除（${HID.size}）`;
  const nodes=full.nodes.filter(n=>keep.has(n.id)).map(n=>({...n}));const byId=new Map(nodes.map(n=>[n.id,n]));
  const links=full.links.filter(l=>byId.has(l.source)&&byId.has(l.target)).map(l=>({...l}));
- const W=svgEl.clientWidth||800,H=svgEl.clientHeight||600,K=Math.max(.45,Math.min(1,W/820));
- svg.attr('viewBox',`0 0 ${W} ${H}`);svg.append('rect').attr('class','bg').attr('width',W).attr('height',H).attr('fill','#fff');
+ const W0=svgEl.clientWidth||800,H0=svgEl.clientHeight||600,F=Math.sqrt(Math.max(1,nodes.length/45)),W=W0*F,H=H0*F,K=Math.max(.45,Math.min(1,W0/820));
+ svg.attr('viewBox',`0 0 ${W0} ${H0}`);svg.append('rect').attr('class','bg').attr('x',-5*W).attr('y',-5*H).attr('width',11*W).attr('height',11*H).attr('fill','#fff');
  const root=svg.append('g');
- const zoom=d3.zoom().scaleExtent([.2,4]).filter(e=>!(e.type==='wheel'&&e.shiftKey)&&!e.button).on('zoom',e=>root.attr('transform',e.transform));svg.call(zoom);
+ const zoom=d3.zoom().scaleExtent([.05,8]).filter(e=>!(e.type==='wheel'&&e.shiftKey)&&!e.button).on('zoom',e=>root.attr('transform',e.transform));svg.call(zoom).on('dblclick.zoom',null);
  const boxG=root.append('g'),linkG=root.append('g'),labG=root.append('g'),nodeG=root.append('g');
  const t=byId.get(full.tid);if(t){t.fx=W/2;t.fy=H/2}
  const BASE=n=>n.kind==='target'?24:n.kind==='cp'||n.kind==='unknown'?15:n.kind==='legal'?11:n.kind==='grp'?10:n.kind==='biz'?9:6;
  const R=n=>BASE(n)*P.scale*(P.ns[n.id]||1);
  const FS=n=>(n.kind==='person'?11:12)*P.font*Math.sqrt(P.ns[n.id]||1);
+ GZ={svg,zoom,nodes,W0,H0,R};if(F>1)svg.call(zoom.transform,d3.zoomIdentity.translate(W0/2,H0/2).scale(1/F).translate(-W/2,-H/2));
  /* ---- group boxes (resizable) ---- */
  const groups=full.groups.map(g=>g.filter(id=>byId.has(id))).filter(g=>g.length>=2).map(g=>({ids:g,key:[...g].sort().join('|')}));
  groups.forEach(g=>{g.o=P.box[g.key]=P.box[g.key]||{l:0,t:0,r:0,b:0}});
@@ -1273,6 +1296,7 @@ function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML
  const nb=id=>new Set([id,...links.filter(l=>l.source.id===id||l.target.id===id).flatMap(l=>[l.source.id,l.target.id])]);
  let sel=null;
  let selG=null;
+ const MS=new Set();
  const grpMembers=g=>{const set=new Set(g.ids);nodes.forEach(n=>{if(n.kind==='person'||n.kind==='biz'){const ls=links.filter(l=>l.source.id===n.id||l.target.id===n.id);if(ls.length&&ls.every(l=>set.has(l.source.id===n.id?l.target.id:l.source.id)))set.add(n.id)}});return[...set].map(id=>byId.get(id)).filter(Boolean)};
  const applySel=()=>{const s=sel?nb(sel):null;
   box.select('rect.frame').attr('stroke',g=>g===selG?GC.blue:'#c9a800').attr('stroke-width',g=>g===selG?3:1.5);
@@ -1280,11 +1304,17 @@ function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML
   if(sel){const n=byId.get(sel);const g=ng.filter(x=>x.id===sel);const r=R(n),o=r*0.71+5;
    g.append('circle').attr('class','rh').attr('r',7).attr('cx',o).attr('cy',o).attr('fill','#fff').attr('stroke',GC.blue).attr('stroke-width',2).style('cursor','nwse-resize')
     .call(d3.drag().subject(function(){return{x:+this.getAttribute('cx'),y:+this.getAttribute('cy')}}).on('start',e=>{e.sourceEvent.stopPropagation()}).on('drag',e=>{const nr=Math.max(3,(Math.hypot(e.x,e.y)/Math.SQRT2-5)/0.71);P.ns[sel]=Math.max(.3,Math.min(6,nr/(BASE(n)*P.scale)));applySizes();const o2=R(n)*0.71+5;g.select('circle.rh').attr('cx',o2).attr('cy',o2);$('gToolPct').textContent=Math.round(P.ns[sel]*100)+'%'}).on('end',()=>save()))}ng.attr('opacity',n=>!s||s.has(n.id)?1:.12);ln.attr('opacity',l=>!s||(l.source.id===sel||l.target.id===sel)?1:.06);ll.attr('opacity',l=>!s||(l.source.id===sel||l.target.id===sel)?1:.06);
-  ng.select('circle.selring').attr('display',n=>n.id===sel?null:'none');
+  ng.select('circle.selring').attr('display',n=>n.id===sel||MS.has(n.id)?null:'none');
+  const nd=[...MS].filter(id=>id!==full.tid).length;$('gDelSel').disabled=!nd;$('gDelSel').textContent=nd?`刪除選取（${nd}）`:'刪除選取';
+  $('gSelInfo').textContent=MS.size>1?`已選 ${MS.size} 個節點（Ctrl／Shift＋點選可加選或取消，按 Delete 刪除）`:'';
+  $('gToolDel').style.display=sel&&sel!==full.tid?'':'none';
   const tool=$('gTool');if(sel){const n=byId.get(sel);$('gToolName').textContent=n.label;$('gToolPct').textContent=Math.round((P.ns[sel]||1)*100)+'%';tool.style.display='flex'}
   else if(selG){const ms=grpMembers(selG);$('gToolName').textContent=`黃框群組（${ms.length} 個節點）`;$('gToolPct').textContent='';tool.style.display='flex'}else tool.style.display='none'};
  const resizeNode=(id,f)=>{P.ns[id]=Math.max(.3,Math.min(5,(P.ns[id]||1)*f));if(Math.abs(P.ns[id]-1)<.02)delete P.ns[id];save();applySizes();applySel()};
- ng.on('click',(e,n)=>{e.stopPropagation();selG=null;sel=sel===n.id?null:n.id;applySel()});svg.on('click',()=>{sel=null;selG=null;applySel()});
+ ng.on('click',(e,n)=>{e.stopPropagation();selG=null;
+  if(e.ctrlKey||e.metaKey||e.shiftKey){if(sel&&!MS.size)MS.add(sel);MS.has(n.id)?MS.delete(n.id):MS.add(n.id);sel=MS.size===1?[...MS][0]:null}
+  else{sel=sel===n.id?null:n.id;MS.clear();if(sel)MS.add(sel)}applySel()});
+ svg.on('click',()=>{sel=null;selG=null;MS.clear();applySel()});
  box.select('rect.frame').on('click',(e,g)=>{e.stopPropagation();sel=null;selG=selG===g?null:g;applySel()});
  const resizeGroup=f=>{grpMembers(selG).forEach(n=>{P.ns[n.id]=Math.max(.3,Math.min(6,(P.ns[n.id]||1)*f));if(Math.abs(P.ns[n.id]-1)<.02)delete P.ns[n.id]});save();applySizes();applySel()};
  ng.on('wheel',(e,n)=>{if(!e.shiftKey)return;e.preventDefault();e.stopPropagation();resizeNode(n.id,e.deltaY<0?1.1:1/1.1)});
@@ -1292,7 +1322,13 @@ function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML
  $('gToolReset').onclick=()=>{if(sel){delete P.ns[sel]}else if(selG){grpMembers(selG).forEach(n=>delete P.ns[n.id])}save();applySizes();applySel()};
  $('gScale').oninput=()=>{P.scale=+$('gScale').value;applySizes()};$('gScale').onchange=save;
  $('gFont').oninput=()=>{P.font=+$('gFont').value;applySizes()};$('gFont').onchange=save;
- GDATA={focus:id=>{sel=byId.has(id)?id:null;applySel()}};
+ const hideIds=ids=>{ids=ids.filter(id=>id!==full.tid);if(!ids.length)return;P.hide=[...new Set([...P.hide,...ids])];MS.clear();sel=null;save();renderGraph()};
+ $('gSelAll').onclick=()=>{selG=null;sel=null;MS.clear();nodes.forEach(n=>MS.add(n.id));applySel()};
+ $('gDelSel').onclick=()=>hideIds([...MS]);
+ $('gToolDel').onclick=()=>{if(sel)hideIds([sel])};
+ $('gDelAll').onclick=()=>{const ids=nodes.map(n=>n.id).filter(id=>id!==full.tid);if(!ids.length)return;if(confirm(`要從關係圖刪除全部 ${ids.length} 個節點（保留標的公司）嗎？\n只是不畫在圖上，交易對手資料不會刪除，之後可按「還原已刪除」找回。`))hideIds(ids)};
+ $('gRestore').onclick=()=>{P.hide=[];save();renderGraph()};
+ GDATA={focus:id=>{sel=byId.has(id)?id:null;MS.clear();if(sel)MS.add(sel);applySel()},del:()=>{const ids=MS.size?[...MS]:sel?[sel]:[];hideIds(ids)}};
  const dragSet=n=>{const m=$('gDrag').value;if(m==='group'){const g=groups.find(g=>g.ids.includes(n.id));if(g)return grpMembers(g)}if(m==='nbr')return[...nb(n.id)].map(id=>byId.get(id)).filter(Boolean);return[n]};
  ng.call(d3.drag().on('start',(e,n)=>{if(!e.active)SIM.alphaTarget(.2).restart();n._set=dragSet(n);n._set.forEach(m=>{m.fx=m.x;m.fy=m.y})}).on('drag',(e,n)=>{n._set.forEach(m=>{m.fx+=e.dx;m.fy+=e.dy})}).on('end',(e,n)=>{if(!e.active)SIM.alphaTarget(0)}));
  $('gDrag').value=P.drag||'group';$('gDrag').onchange=()=>{P.drag=$('gDrag').value;save()};
@@ -1302,7 +1338,12 @@ function renderGraph(){const svgEl=$('gsvg');if(!window.d3){$('watch').innerHTML
    ln.attr('x1',l=>l.source.x).attr('y1',l=>l.source.y).attr('x2',l=>l.target.x).attr('y2',l=>l.target.y);
    ll.attr('x',l=>(l.source.x+l.target.x)/2).attr('y',l=>(l.source.y+l.target.y)/2-4);ng.attr('transform',n=>`translate(${n.x},${n.y})`);drawBoxes()});
  applySizes();
+ SIM.on('end.fit',()=>{if(!GZ.fitted){GZ.fitted=true;gFit(400)}});setTimeout(()=>{if(GZ&&!GZ.fitted){GZ.fitted=true;gFit(400)}},3500);
  if(t)setTimeout(()=>{t.fx=null;t.fy=null},2500)}
+function gFit(ms=300){if(!GZ||!GZ.nodes.length)return;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;GZ.nodes.forEach(n=>{const r=GZ.R(n)+40;x0=Math.min(x0,n.x-r);y0=Math.min(y0,n.y-r);x1=Math.max(x1,n.x+r);y1=Math.max(y1,n.y+r)});
+ const el=$('gsvg'),W=GZ.W0,H=GZ.H0,k=Math.min(4,.95*Math.min(W/(x1-x0),H/(y1-y0)));GZ.svg.transition().duration(ms).call(GZ.zoom.transform,d3.zoomIdentity.translate(W/2,H/2).scale(k).translate(-(x0+x1)/2,-(y0+y1)/2))}
+function gFs(on){const b=$('gbox');on=on==null?!b.classList.contains('fs'):on;b.classList.toggle('fs',on);document.body.classList.toggle('gfs',on);$('gzFs').innerHTML=on?'離開<br>全螢幕':'全螢幕';
+ if(GZ){const el=$('gsvg');GZ.W0=el.clientWidth||GZ.W0;GZ.H0=el.clientHeight||GZ.H0;GZ.svg.attr('viewBox',`0 0 ${GZ.W0} ${GZ.H0}`);gFit(0)}}
 function tipHtml(n){const r=n.reg;let h=`<b>${esc(n.label)}</b>`;
  if(n.ban)h+=`<br>統編 ${esc(n.ban)}`;
  if(r)h+=`<br>${esc(r.status)}・代表人 ${esc(r.rep)}<br>${esc(r.addr)}<br>設立 ${esc(r.est)}　董監事 ${r.dirs.length} 人`;
@@ -1333,6 +1374,9 @@ function svgString(){const svg=$('gsvg').cloneNode(true);const W=$('gsvg').clien
  const c=cur();const cap=document.createElementNS('http://www.w3.org/2000/svg','text');cap.setAttribute('x',10);cap.setAttribute('y',H-10);cap.setAttribute('font-size',11);cap.setAttribute('fill','#5d5d58');
  cap.textContent=`${c.ticker} ${c.name}｜商工資料：台灣公司資料 API｜輸出 ${now()}｜${VERSION}｜同名不等於同一人`;svg.appendChild(cap);
  return new XMLSerializer().serializeToString(svg)}
+$('gzIn').onclick=()=>GZ&&GZ.svg.transition().duration(200).call(GZ.zoom.scaleBy,1.4);$('gzOut').onclick=()=>GZ&&GZ.svg.transition().duration(200).call(GZ.zoom.scaleBy,1/1.4);
+$('gzFit').onclick=()=>gFit();$('gzFs').onclick=()=>gFs();document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('gbox').classList.contains('fs'))gFs(false);
+ if(e.key==='Delete'&&GDATA&&GDATA.del&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||'')&&$('gbox').offsetParent!==null){e.preventDefault();GDATA.del()}});
 $('gResetSize').onclick=()=>{const c=cur();delete c.gp;save();renderGraph()};
 $('gFocus').onchange=renderGraph;$('gAll').onchange=renderGraph;$('gBiz').onchange=renderGraph;$('gRelayout').onclick=renderGraph;
 $('gSvg').onclick=()=>download(`${cur().ticker||'標的'}_關係圖.svg`,svgString(),'image/svg+xml');
@@ -1354,6 +1398,30 @@ window.addEventListener('hashchange',()=>{const t=location.hash.replace('#','');
 function renderCoStrip(){const c=cur();const b=$('coStrip');if(!b)return;
  if(!c||!c.ticker){b.innerHTML='';return}
  b.innerHTML=`<span class="tk">${esc(c.ticker)}</span><span class="nm">${esc(c.name)}</span><span class="meta">${esc(c.fullName||'')}${c.ban?'｜統編 '+esc(c.ban):'｜統編未取得'}</span>${c.market?`<span class="chip">${esc(c.market)}</span>`:''}${c.industry?`<span class="chip">${esc(c.industry)}</span>`:''}`}
+/* ---------- 資料完整性警語 ---------- */
+const NEED_Q=12;
+function dataGaps(){const c=cur();const g=[];if(!c||!c.ticker)return g;
+ if(!/^\d{8}$/.test(c.ban||''))g.push({lv:'hi',t:'尚未取得標的公司統一編號，商工登記、董監事與地址比對都無法進行。'});
+ const d=RPT[c.ticker];
+ if(!d)g.push({lv:'mid',t:'關係人交易資料讀取中，尚未完成。'});
+ else if(d.err==='nobase')g.push({lv:'hi',t:'尚未設定 GitHub 資料位置，讀不到關係人交易資料（請到「設定」填寫）。'});
+ else if(d.err==='none')g.push({lv:'hi',t:'GitHub 還沒有抓過這檔股票的關係人交易資料，目前沒有可比對的關係人。排程會自動補抓，或到 Actions 手動執行「抓取關係人交易」。'});
+ else if(d.err)g.push({lv:'hi',t:`關係人交易資料讀取失敗（${d.msg||d.err}），本次沒有可比對的關係人。`});
+ else{const qs=d.quarters||[];
+  if(qs.length<NEED_Q)g.push({lv:qs.length?'mid':'hi',t:`關係人交易只有 ${qs.length} 季（應有 ${NEED_Q} 季）${(d.missing||[]).length?`，觀測站查無：${d.missing.slice(0,6).join('、')}${d.missing.length>6?'…':''}`:''}；跨期比較與快照差異可能不完整。`});
+  const old=qs.filter(q=>typeof q.parser==='number'&&q.parser<5).length;if(old)g.push({lv:'mid',t:`有 ${old} 季是舊版解析程式的結果，名稱可能有誤抓或漏抓，等排程用新版重抓。`});
+  const bad=qs.filter(q=>(q.notes||[]).some(x=>/找不到/.test(x))).map(q=>q.roc);if(bad.length)g.push({lv:'mid',t:`以下季別解析不到關係人交易內容：${bad.slice(0,6).join('、')}${bad.length>6?'…':''}。`})}
+ const F=c.fin;
+ if(/^00/.test(c.ticker)){}else if(!F)g.push({lv:'mid',t:'歷年財報讀取中，尚未完成。'});
+ else if(F.err||!(F.is||[]).length)g.push({lv:'hi',t:`歷年財報抓不到${F.err?`（${F.err}）`:''}，財報數據與趨勢無法判讀。`});
+ else{const n=new Set((F.is||[]).map(x=>x.date)).size;if(n<NEED_Q)g.push({lv:'mid',t:`歷年財報只有 ${n} 季（應有 ${NEED_Q} 季），長期趨勢判讀可能不完整。`});
+  if((F.errs||[]).length)g.push({lv:'mid',t:'部分財報資料集抓取失敗：'+F.errs.slice(0,3).join('；')})}
+ if(!c.cps.length)g.push({lv:'hi',t:'目前沒有任何具名交易對手，關係圖與集團企業比對沒有對象。'});
+ else{const un=c.cps.filter(p=>!p.reg&&!AUTO).length;if(un)g.push({lv:'mid',t:`有 ${un} 家交易對手尚未對到商工登記（查無或尚未查詢），這些對象的董監事、地址重疊無法判斷。`})}
+ return g}
+function gapHtml(){const g=dataGaps();if(!g.length)return'';
+ return`<div class="gap ${g.some(x=>x.lv==='hi')?'hi':''}"><b>⚠ 資料不完整，判讀時請注意${AUTO?'（查詢中，狀態可能仍在更新）':''}：</b><ul>${g.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul></div>`}
+function renderGaps(){const h=gapHtml();['gapOv','gapRel','gapRpt'].forEach(id=>{const el=$(id);if(el)el.innerHTML=h})}
 function ovData(){const c=cur();const o={alerts:[]};
  if(c.fin&&!c.fin.err){try{const R=computeFin({...c.fin,nq:8});const d=R.dates[0],d1=R.dates[1];o.q=d?qLabel(d):'';
   const v=(k,x)=>R.rows[k]&&x?R.rows[k].vals[x]:null;o.rev=v('rev',d);o.revyoy=v('revyoy',d);o.gm=v('gm',d);o.gm1=v('gm',d1);o.eps=v('eps',d);o.eps1=v('eps',d1);
@@ -1367,7 +1435,7 @@ function ovData(){const c=cur();const o={alerts:[]};
  const p=period();o.rec=p?COLS.reduce((a,C)=>a+p.cols[C.k].length,0):0;const idx=c.periods.indexOf(p);const prev=c.periods[idx-1];o.pending=prev?prev.cols.next.filter(it=>!p.checks[it.id]||p.checks[it.id].status==='待查').length:0;
  if(o.pending)o.alerts.push({lv:'mid',tag:'驗證指標',text:`上一期設定的 ${o.pending} 項「下一季驗證指標」尚待驗證`,tab:'rec'});
  return o}
-function renderOverview(){const box=$('ovBox');if(!box)return;const c=cur();
+function renderOverview(){const box=$('ovBox');if(!box)return;const c=cur();renderGaps();
  if(!c||!c.ticker){box.innerHTML=`<div class="empty"><b>從上方搜尋框輸入股票開始</b>選定後會自動抓取統編、商工登記、財報、觀測站揭露、關係人與集團關係，並畫出關係圖。</div>`;return}
  const o=ovData();const pct=x=>x?x.v.toFixed(1)+'%':'—';const dd=(a,b,u='')=>a&&b?(a.v-b.v>=0?`<span class="d up">較上季 +${(a.v-b.v).toFixed(u==='%'?1:2)}${u}</span>`:`<span class="d dn">較上季 ${(a.v-b.v).toFixed(u==='%'?1:2)}${u}</span>`):'';
  const tabCnt=(t,n)=>{const b=document.querySelector(`#tabs button[data-t="${t}"]`);if(!b)return;b.querySelectorAll('.cnt').forEach(x=>x.remove());if(n)b.insertAdjacentHTML('beforeend',`<span class="cnt">${n}</span>`)};
