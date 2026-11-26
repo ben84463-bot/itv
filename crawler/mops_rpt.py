@@ -26,6 +26,8 @@ INTERVAL = float(os.environ.get('MOPS_INTERVAL', '8'))
 KEEP_Q = int(os.environ.get('KEEP_QUARTERS', '12'))
 FULL_DETAIL_Q = 4   # 最近 4 季保留完整表格；更早的季別只留關係人名單，控制資料量
 PARSER_VERSION = 3
+DEBUG_HTML = os.environ.get('DEBUG_HTML', '') in ('1', 'true', 'True')
+DEBUG_DIR = os.path.join(ROOT, 'data', 'debug')
 
 _last = [0.0]
 
@@ -368,7 +370,7 @@ def crawl_one(code, keep=KEEP_Q, known=None):
         if len(quarters) >= keep:
             break
         k = f'{y}Q{q}'
-        if k in have:
+        if k in have and not (DEBUG_HTML and not quarters):
             quarters.append(have[k])
             continue
         if k in missing and k not in recent2:
@@ -388,6 +390,8 @@ def crawl_one(code, keep=KEEP_Q, known=None):
                 raise
             if is_missing(html):
                 continue
+            if DEBUG_HTML and not quarters:
+                dump_debug(code, k, rid, html)
             rep = parse_report(html)
             got = {'year': y, 'quarter': q, 'roc': f'{y-1911}Q{q}', 'reportId': rid, 'reportType': '合併' if rid == 'C' else '個體',
                    'url': url, 'fetched': dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).isoformat(timespec='seconds'), 'parser': PARSER_VERSION, **rep}
@@ -401,6 +405,22 @@ def crawl_one(code, keep=KEEP_Q, known=None):
                 missing.add(k)
             print(f'  {code} {k}：觀測站無此季財報', flush=True)
     return _save(code, path, old, quarters, missing, known)
+
+
+def dump_debug(code, k, rid, html):
+    os.makedirs(DEBUG_DIR, exist_ok=True)
+    idxs = [m.start() for m in re.finditer('關係人', html)]
+    info = {'code': code, 'quarter': k, 'reportId': rid, 'size': len(html), 'hits_關係人': len(idxs),
+            'first_hits': idxs[:40], 'tables': html.count('<table'), 'divs': html.count('<div'), 'pre': html.count('<pre')}
+    start = max(0, (idxs[0] if idxs else 0) - 20000)
+    # 取第一個「關係人交易」標題附近，若無則取第一個「關係人」附近
+    t = html.find('關係人交易')
+    if t >= 0:
+        start = max(0, t - 20000)
+    snippet = html[start:start + 400000]
+    open(os.path.join(DEBUG_DIR, f'{code}_{k}_{rid}.html'), 'w', encoding='utf-8').write(snippet)
+    json.dump(info, open(os.path.join(DEBUG_DIR, f'{code}_{k}_{rid}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    print(f'  除錯：已存 {code} {k} 原始頁面片段（全頁 {len(html)} 字、「關係人」出現 {len(idxs)} 次、table {info["tables"]} 個）', flush=True)
 
 
 def _save(code, path, old, quarters, missing, known):
