@@ -25,7 +25,7 @@ UA = 'Mozilla/5.0 (compatible; itv-rpt-crawler/1.0; +public research, 4s interva
 INTERVAL = float(os.environ.get('MOPS_INTERVAL', '8'))
 KEEP_Q = int(os.environ.get('KEEP_QUARTERS', '12'))
 FULL_DETAIL_Q = 4   # 最近 4 季保留完整表格；更早的季別只留關係人名單，控制資料量
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 DEBUG_HTML = os.environ.get('DEBUG_HTML', '') in ('1', 'true', 'True')
 DEBUG_DIR = os.path.join(ROOT, 'data', 'debug')
 
@@ -310,6 +310,61 @@ def sched_from(blocks):
     return res, names
 
 
+NIL = re.compile(r'無此情形|免揭露|不適用')
+NAME_IX = re.compile(r'RelatedParty.*Name|NameOfRelatedParty|NameOfParentEntity', re.I)
+
+
+def section_rp(soup):
+    """v4：新版 iXBRL 財報以 <div id="TransactionsBetweenRelatedParties"> 為錨點，
+    其下是 div.title（大標）、置中 div（項目名稱）＋「無此情形／免揭露」或表格。"""
+    a = soup.find('div', id='TransactionsBetweenRelatedParties')
+    if a is None:
+        return None
+    sec = {'found': True, 'parent': '', 'nil': [], 'items': [], 'kmp': [], 'ixNames': []}
+    label, big = '', ''
+    for el in a.find_all_next(['div', 'table']):
+        if el.name == 'div' and el.get('id'):
+            break
+        if el.find_parent('table') is not None:
+            continue
+        if el.name == 'div':
+            t = clean(el.get_text(' '))
+            if not t or el.find('table'):
+                continue
+            if 'title' in (el.get('class') or []):
+                big = label = t
+            elif NIL.search(t) and len(t) <= 20:
+                if label and label not in sec['nil']:
+                    sec['nil'].append(label)
+            elif len(t) <= 40 and 'rptidx' not in (el.get('class') or []):
+                label = t
+            continue
+        rows = table_rows(el)
+        if not rows:
+            continue
+        for ix in el.find_all(lambda x: x.name and x.name.lower().endswith('nonnumeric')):
+            nm = ix.get('name', '')
+            v = clean(ix.get_text(' '))
+            if 'NameOfParentEntity' in nm:
+                sec['parent'] = v
+            elif NAME_IX.search(nm) and v and v not in sec['ixNames']:
+                sec['ixNames'].append(v)
+        head = ' '.join(c for r in rows[:2] for c in r)
+        if re.search(r'母公司及最終控制者', head) and len(rows) <= 2:
+            if not sec['parent']:
+                sec['parent'] = rows[0][-1]
+            continue
+        if re.search(r'主要管理階層', head):
+            sec['kmp'] = rows
+            continue
+        ttl = label or big or '關係人交易'
+        if len(rows[0]) == 1 and len(rows[0][0]) <= 60:
+            ttl = rows[0][0]
+        sec['items'].append({'title': ttl, 'rows': rows})
+        label = ''
+    return sec
+
+
 def parse_report(html):
     soup = BeautifulSoup(html, 'html.parser')
     blocks = blocks_of(soup)
@@ -322,8 +377,31 @@ def parse_report(html):
             names.add(x['name'])
     if rp and not rp_tables:
         rp_tables = rp
-    notes = []
-    if not rp_tables and not parties:
+    sec = section_rp(soup)
+    if sec:
+        srows = []
+        for it in sec['items']:
+            srows.append(['__CAP__', '關係人交易－' + it['title'] if '關係人' not in it['title'] else it['title']])
+            srows.extend(it['rows'])
+            srows.append(['__END__'])
+        sp, _ = parties_from_stream(srows)
+        for nm in sec['ixNames']:
+            x = split_name(nm)
+            if x:
+                x['src'] = '財報 iXBRL 關係人名稱欄位'
+                sp.append(x)
+        for x in sp:
+            if x['name'] not in names:
+                parties.append(x)
+                names.add(x['name'])
+        core = lambda rows: [r for r in rows if len(r) > 1]
+        for it in sec['items']:
+            if not any(core(it['rows']) == core(b['rows']) for b in rp_tables):
+                rp_tables.append(it)
+    notes, info = [], []
+    if sec and sec['nil'] and not sec['items'] and not parties:
+        info.append(f"公司在財報關係人交易附註申報「無此情形／免揭露」（{len(sec['nil'])} 項：{'、'.join(sec['nil'][:6])}{'…' if len(sec['nil']) > 6 else ''}）")
+    elif not rp_tables and not parties:
         notes.append('找不到「關係人交易」相關表格')
     elif not parties:
         notes.append('有關係人交易表格，但未辨識出具名關係人（可能全為類別揭露）')
@@ -337,8 +415,9 @@ def parse_report(html):
                 if len(c) > 150 and c not in texts:
                     texts.append(c[:6000])
     tables = [b for b in rp_tables if not all(len(r) == 1 and len(r[0]) > 150 for r in b['rows'])]
-    return {'how': 'tables-v3', 'unit': unit, 'parties': parties, 'tables': tables[:80], 'texts': texts[:30],
-            'schedules': schedules, 'schedNames': sched_names, 'notes': notes}
+    return {'how': 'section-v4' if sec else 'tables-v3', 'unit': unit, 'parties': parties, 'tables': tables[:80], 'texts': texts[:30],
+            'schedules': schedules, 'schedNames': sched_names, 'notes': notes, 'info': info,
+            'rpSec': ({'parent': sec['parent'], 'nil': sec['nil'], 'kmp': sec['kmp'][:12], 'items': len(sec['items'])} if sec else None)}
 
 
 # ---------------------------------------------------------------- quarters & crawl
